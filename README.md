@@ -118,19 +118,43 @@ apps/backend
 
 Nếu để trống hoặc sai path, build sẽ lỗi `COPY apps/backend`.
 
-### 2. Thêm PostgreSQL (bắt buộc PostGIS)
+### 2. Thêm PostgreSQL có PostGIS
 
-Backend dùng PostGIS (`CREATE EXTENSION postgis`). Trên Railway:
+**Lưu ý:** Postgres mặc định trên Railway **không có PostGIS**. Nếu chạy script báo `extension "postgis" is not available`, làm một trong hai cách dưới.
 
-1. **Add Service** → **Database** → **PostgreSQL**
-2. Sau khi Postgres chạy, mở **Data** tab (hoặc Query) và chạy:
+#### Cách A — Docker PostGIS trên Railway (khuyên dùng)
 
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+1. Xóa hoặc bỏ qua Postgres mặc định (nếu không dùng)
+2. **+ New** → **Empty Service** → đặt tên `Postgis`
+3. **Settings → Source** → **Deploy from Docker Image** → `postgis/postgis:16-3.5`
+4. **Variables** trên service Postgis:
+   ```env
+   POSTGRES_USER=postgres
+   POSTGRES_DB=railway
+   POSTGRES_PASSWORD=<mat-khau-manh>
+   ```
+5. **Settings → Volumes** → mount `/var/lib/postgresql/data`
+6. **Settings → Networking** → bật private networking (mặc định có)
+7. Trên service **backend**, thêm Variables (thay password/host cho đúng):
+   ```env
+   DATABASE_URL=postgresql://postgres:<mat-khau>@postgis.railway.internal:5432/railway
+   ```
+   Host `postgis.railway.internal` = tên service viết thường + `.railway.internal`
+
+#### Cách B — Giữ Postgres Railway + bật PostGIS bằng CLI
+
+Chỉ chạy được nếu DB **hỗ trợ** PostGIS (Postgres mặc định thường **không**):
+
+```powershell
+cd RideTogether
+railway login
+railway link
+railway run --service Postgres npm run db:enable-postgis --workspace=apps/backend
 ```
 
-> Nếu migration báo lỗi PostGIS, dùng template **PostGIS** trên Railway marketplace thay cho Postgres thường.
+Tên service đúng trên project của bạn là **`Postgres`** (không phải `PostgreSQL`).
+
+Thành công sẽ thấy: `PostGIS enabled successfully.`
 
 ### 3. Thêm Redis
 
@@ -145,7 +169,7 @@ Trong tab **Variables** của service backend:
 |------|---------|
 | `NODE_ENV` | `production` |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
-| `DATABASE_SSL` | `true` |
+| `DATABASE_SSL` | `false` (dùng URL nội bộ Railway) hoặc bỏ trống |
 | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
 | `JWT_ACCESS_SECRET` | chuỗi random dài (vd. `openssl rand -hex 32`) |
 | `JWT_REFRESH_SECRET` | chuỗi random khác |

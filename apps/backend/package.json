@@ -11,6 +11,7 @@
     "migration:local": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:DATABASE_URL='postgres://ride:ride@localhost:5433/ride_together'; typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts\"",
     "seed": "ts-node src/database/seeds/demo.seed.ts",
     "seed:local": "npm run migration:local && powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:DATABASE_URL='postgres://ride:ride@localhost:5433/ride_together'; ts-node src/database/seeds/demo.seed.ts\"",
+    "db:enable-postgis": "node scripts/enable-postgis.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },

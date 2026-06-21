@@ -16,6 +16,7 @@ import { UsersModule } from "./users/users.module";
 import { LocationsModule } from "./locations/locations.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { HealthModule } from "./health/health.module";
+import { shouldUseDatabaseSsl } from "./config/env";
 
 @Module({
   imports: [
@@ -26,17 +27,22 @@ import { HealthModule } from "./health/health.module";
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: "postgres",
-        url: config.getOrThrow<string>("DATABASE_URL"),
-        autoLoadEntities: true,
-        synchronize: false,
-        migrationsRun: true,
-        migrations: [__dirname + "/database/migrations/*{.ts,.js}"],
-        ssl: config.get<string>("DATABASE_SSL", process.env.NODE_ENV === "production" ? "true" : "false") === "true"
-          ? { rejectUnauthorized: false }
-          : false
-      })
+      useFactory: (config: ConfigService) => {
+        const databaseUrl = config.getOrThrow<string>("DATABASE_URL");
+        return {
+          type: "postgres",
+          url: databaseUrl,
+          autoLoadEntities: true,
+          synchronize: false,
+          migrationsRun: true,
+          migrations: [__dirname + "/database/migrations/*{.ts,.js}"],
+          ssl: shouldUseDatabaseSsl(databaseUrl, config.get<string>("DATABASE_SSL")),
+          extra: {
+            max: 5,
+            connectionTimeoutMillis: 15_000
+          }
+        };
+      }
     }),
     RedisModule,
     NotificationsModule,
