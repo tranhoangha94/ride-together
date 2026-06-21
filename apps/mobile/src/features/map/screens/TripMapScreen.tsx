@@ -36,7 +36,7 @@ export function TripMapScreen({ route, navigation }: Props) {
   const leader = memberList[0];
 
   const fetchSafetyPointsForViewport = useCallback(async ({ lat, lng, radius }: { lat: number; lng: number; radius: number }) => {
-    const normalizedRadius = Math.min(5000, Math.max(500, Math.round(radius)));
+    const normalizedRadius = Math.min(5000, Math.max(800, Math.round(radius)));
     const key = `${Math.round(lat * 2000)}:${Math.round(lng * 2000)}:${Math.round(normalizedRadius / 500)}`;
     if (safetyFetchRef.current.key === key) return;
     safetyFetchRef.current.key = key;
@@ -48,14 +48,15 @@ export function TripMapScreen({ route, navigation }: Props) {
     safetyFetchRef.current.timer = setTimeout(async () => {
       setSafetyLoading(true);
       try {
-        const nearby = await api<SafetyPoint[]>(`/safety-points/nearby?lat=${lat}&lng=${lng}&radius=${normalizedRadius}`);
-        if (nearby.length > 0) {
-          setSafetyPoints(nearby);
-          return;
+        const [apiPoints, overpassPoints] = await Promise.all([
+          api<SafetyPoint[]>(`/safety-points/nearby?lat=${lat}&lng=${lng}&radius=${normalizedRadius}`).catch(() => [] as SafetyPoint[]),
+          fetchSafetyPointsFromOverpass(lat, lng, normalizedRadius)
+        ]);
+        const merged = new Map<string, SafetyPoint>();
+        for (const point of [...apiPoints, ...overpassPoints]) {
+          merged.set(point.id, point);
         }
-        setSafetyPoints(await fetchSafetyPointsFromOverpass(lat, lng, normalizedRadius));
-      } catch {
-        setSafetyPoints(await fetchSafetyPointsFromOverpass(lat, lng, normalizedRadius));
+        setSafetyPoints([...merged.values()]);
       } finally {
         setSafetyLoading(false);
       }
@@ -66,22 +67,33 @@ export function TripMapScreen({ route, navigation }: Props) {
     if (!isDemo) return;
 
     async function loadDemoLeaderLocation() {
+      const defaultLat = 10.7769;
+      const defaultLng = 106.7009;
+
+      async function loadSafetyAt(lat: number, lng: number) {
+        await fetchSafetyPointsForViewport({ lat, lng, radius: 2500 });
+      }
+
       const granted = await requestTripLocationPermission();
       if (!granted) {
-        Alert.alert("Cần quyền vị trí", "Bật GPS để demo đặt bạn làm trưởng đoàn trên bản đồ.");
+        await loadSafetyAt(defaultLat, defaultLng);
         return;
       }
 
-      const current = await getCurrentTripLocation();
-      const lat = current.coords.latitude;
-      const lng = current.coords.longitude;
-      const speedKmh = Math.max(0, Math.round((current.coords.speed ?? 0) * 3.6));
-      setMembers({
-        leader: { userId: "Bạn", lat, lng, speed: speedKmh, recordedAt: new Date().toISOString() },
-        rider1: { userId: "Rider 1", lat: lat + 0.0032, lng: lng + 0.0027, speed: 39, recordedAt: new Date().toISOString() },
-        rider2: { userId: "Rider 2", lat: lat - 0.0037, lng: lng - 0.0025, speed: 35, recordedAt: new Date().toISOString() }
-      });
-      await fetchSafetyPointsForViewport({ lat, lng, radius: 1500 });
+      try {
+        const current = await getCurrentTripLocation();
+        const lat = current.coords.latitude;
+        const lng = current.coords.longitude;
+        const speedKmh = Math.max(0, Math.round((current.coords.speed ?? 0) * 3.6));
+        setMembers({
+          leader: { userId: "Bạn", lat, lng, speed: speedKmh, recordedAt: new Date().toISOString() },
+          rider1: { userId: "Rider 1", lat: lat + 0.0032, lng: lng + 0.0027, speed: 39, recordedAt: new Date().toISOString() },
+          rider2: { userId: "Rider 2", lat: lat - 0.0037, lng: lng - 0.0025, speed: 35, recordedAt: new Date().toISOString() }
+        });
+        await loadSafetyAt(lat, lng);
+      } catch {
+        await loadSafetyAt(defaultLat, defaultLng);
+      }
     }
 
     void loadDemoLeaderLocation();

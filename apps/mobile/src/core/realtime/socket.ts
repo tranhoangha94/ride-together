@@ -8,7 +8,7 @@ export async function getTripSocket() {
   if (socket?.connected) return socket;
   const token = await getAccessToken();
   socket = io(env.socketUrl, {
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     auth: { token }
   });
   return socket;

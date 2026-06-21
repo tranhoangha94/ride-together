@@ -16,8 +16,10 @@ import { RootStackParamList } from "./types";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
+  const bypassAuth = process.env.EXPO_PUBLIC_BYPASS_AUTH === "true";
+
   return (
-    <Stack.Navigator initialRouteName="Login">
+    <Stack.Navigator initialRouteName={bypassAuth ? "TripMap" : "Login"}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
@@ -26,7 +28,12 @@ export function RootNavigator() {
       <Stack.Screen name="CreateTeam" component={CreateTeamScreen} options={{ title: "Create Team" }} />
       <Stack.Screen name="TripList" component={TripListScreen} options={{ title: "Trips" }} />
       <Stack.Screen name="CreateTrip" component={CreateTripScreen} options={{ title: "Create Trip" }} />
-      <Stack.Screen name="TripMap" component={TripMapScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="TripMap"
+        component={TripMapScreen}
+        initialParams={bypassAuth ? { tripId: "demo-trip", demo: true } : undefined}
+        options={{ headerShown: false }}
+      />
       <Stack.Screen name="TripMembers" component={TripMembersScreen} options={{ title: "Members" }} />
       <Stack.Screen name="Checkpoints" component={CheckpointScreen} options={{ title: "Checkpoints" }} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
