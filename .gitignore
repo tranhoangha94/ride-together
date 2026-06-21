@@ -1,0 +1,12 @@
+node_modules
+.npm-cache
+dist
+build
+.expo
+.next
+.env
+.env.local
+coverage
+*.log
+android
+ios

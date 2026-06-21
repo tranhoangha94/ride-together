@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+.git
+**/.env
+**/.env.local
+apps/mobile
+apps/admin-web
+packages
+docker-compose.yml
+*.md
+.cursor

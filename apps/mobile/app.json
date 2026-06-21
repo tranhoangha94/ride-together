@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Ride Together",
+    "slug": "ride-together",
+    "scheme": "rideteam",
+    "entryPoint": "./index.js",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ride Together uses your location to share your position with your active trip members.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ride Together can keep your trip location updated while you ride."
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "ride-together-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/backend",
+    "apps/mobile",
+    "apps/admin-web",
+    "packages/shared-contracts"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace apps/backend run start:dev",
+    "dev:admin": "npm --workspace apps/admin-web run dev",
+    "lint": "npm --workspaces run lint",
+    "typecheck": "npm --workspaces run typecheck"
+  }
+}
