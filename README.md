@@ -108,7 +108,15 @@ npm --workspace apps/admin-web run typecheck
 
 1. Đăng nhập [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
 2. Chọn repo `RideTogether`
-3. Railway sẽ đọc `railway.toml` và build bằng `Dockerfile.railway`
+3. Railway sẽ đọc `railway.toml` và build bằng `apps/backend/Dockerfile.railway`
+
+**Quan trọng:** Trong service backend → **Settings → Source → Root Directory** đặt là:
+
+```text
+apps/backend
+```
+
+Nếu để trống hoặc sai path, build sẽ lỗi `COPY apps/backend`.
 
 ### 2. Thêm PostgreSQL (bắt buộc PostGIS)
 
