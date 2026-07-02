@@ -8,6 +8,11 @@ export async function resetMapNorth(mapRef: RefObject<MapView | null>) {
   await map.animateCamera({ ...camera, heading: 0, pitch: 0 }, { duration: 250 });
 }
 
+// ~17 keeps roughly a 400m-wide view on screen, close enough to make out streets
+// without feeling like a whole-city overview.
+const FOCUS_ZOOM = 17;
+const FOCUS_DELTA = 0.0036;
+
 export async function centerMapOn(mapRef: RefObject<MapView | null>, latitude: number, longitude: number) {
   const map = mapRef.current;
   if (!map) return;
@@ -19,7 +24,7 @@ export async function centerMapOn(mapRef: RefObject<MapView | null>, latitude: n
         center: { latitude, longitude },
         heading: camera.heading ?? 0,
         pitch: 0,
-        zoom: typeof camera.zoom === "number" ? camera.zoom : 15
+        zoom: Math.max(FOCUS_ZOOM, typeof camera.zoom === "number" ? camera.zoom : FOCUS_ZOOM)
       },
       { duration: 300 }
     );
@@ -29,8 +34,8 @@ export async function centerMapOn(mapRef: RefObject<MapView | null>, latitude: n
       {
         latitude,
         longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02
+        latitudeDelta: FOCUS_DELTA,
+        longitudeDelta: FOCUS_DELTA
       },
       300
     );

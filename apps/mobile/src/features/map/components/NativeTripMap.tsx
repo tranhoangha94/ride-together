@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   controls: {
     position: "absolute",
     right: 16,
-    bottom: 248,
+    bottom: 288,
     gap: 8
   },
   controlButton: {
