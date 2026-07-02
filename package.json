@@ -13,5 +13,28 @@
     "dev:admin": "npm --workspace apps/admin-web run dev",
     "lint": "npm --workspaces run lint",
     "typecheck": "npm --workspaces run typecheck"
+  },
+  "overrides": {
+    "expo-application": {
+      "expo": "~54.0.0"
+    },
+    "@react-navigation/core": {
+      "react": "19.1.0"
+    },
+    "@tanstack/react-query": {
+      "react": "19.1.0"
+    },
+    "zustand": {
+      "react": "19.1.0"
+    },
+    "react-freeze": {
+      "react": "19.1.0"
+    },
+    "use-latest-callback": {
+      "react": "19.1.0"
+    },
+    "use-sync-external-store": {
+      "react": "19.1.0"
+    }
   }
 }
