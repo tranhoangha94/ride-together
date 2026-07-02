@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -25,15 +25,27 @@ export class AuthService {
       throw new BadRequestException("Email or phone is required.");
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.users.save(
-      this.users.create({
-        email: dto.email,
-        phone: dto.phone,
-        displayName: dto.displayName,
-        passwordHash
-      })
-    );
+    let user: User;
+    try {
+      user = await this.users.save(
+        this.users.create({
+          email: dto.email,
+          phone: dto.phone,
+          displayName: dto.displayName,
+          passwordHash
+        })
+      );
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException("Email hoặc số điện thoại này đã được đăng ký.");
+      }
+      throw error;
+    }
     return this.authResponse(user);
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
   }
 
   async login(dto: LoginDto) {
