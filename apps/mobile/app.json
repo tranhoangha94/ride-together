@@ -17,6 +17,9 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "FOREGROUND_SERVICE"
       ],
       "config": {
@@ -24,6 +27,18 @@
           "apiKey": "REPLACE_WITH_GOOGLE_MAPS_API_KEY"
         }
       }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7c8273de-b28f-40ab-a05b-36fdc382e418"
+      }
+    },
+    "owner": "tranhoangha94",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7c8273de-b28f-40ab-a05b-36fdc382e418"
     }
   }
 }

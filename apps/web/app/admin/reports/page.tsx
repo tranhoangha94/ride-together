@@ -10,7 +10,7 @@ async function getReports() {
   }
 }
 
-export default async function AdminHome() {
+export default async function AdminReportsPage() {
   const reports = await getReports();
   return (
     <main>

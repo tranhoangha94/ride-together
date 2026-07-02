@@ -1,10 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { makeInviteCode } from "../common/utils/invite-code";
 import { TeamMember } from "../teams/team-member.entity";
 import { TeamsService } from "../teams/teams.service";
 import { TripMember } from "../trip-members/trip-member.entity";
+import { User } from "../users/user.entity";
 import { CreateTripDto, JoinTripDto } from "./dto";
 import { Trip } from "./trip.entity";
 
@@ -14,8 +15,19 @@ export class TripsService {
     @InjectRepository(Trip) private readonly trips: Repository<Trip>,
     @InjectRepository(TripMember) private readonly members: Repository<TripMember>,
     @InjectRepository(TeamMember) private readonly teamMembers: Repository<TeamMember>,
+    @InjectRepository(User) private readonly users: Repository<User>,
     private readonly teams: TeamsService
   ) {}
+
+  private async withUsers(members: TripMember[]) {
+    if (members.length === 0) return [];
+    const users = await this.users.findBy({ id: In(members.map((m) => m.userId)) });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return members.map((member) => {
+      const user = byId.get(member.userId);
+      return { ...member, user: user ? { id: user.id, displayName: user.displayName, avatarUrl: user.avatarUrl } : undefined };
+    });
+  }
 
   async create(userId: string, dto: CreateTripDto) {
     await this.teams.assertMember(dto.teamId, userId);
@@ -23,7 +35,7 @@ export class TripsService {
       this.trips.create({
         ...dto,
         leaderId: userId,
-        inviteCode: makeInviteCode("TRIP")
+        inviteCode: makeInviteCode()
       })
     );
     await this.members.save(this.members.create({ tripId: trip.id, userId, role: "leader" }));
@@ -44,7 +56,7 @@ export class TripsService {
     await this.assertTripMember(tripId, userId);
     const trip = await this.trips.findOneByOrFail({ id: tripId });
     const members = await this.members.findBy({ tripId, status: "joined" });
-    return { trip, members };
+    return { trip, members: await this.withUsers(members) };
   }
 
   async start(userId: string, tripId: string) {
@@ -87,7 +99,8 @@ export class TripsService {
 
   async membersOf(userId: string, tripId: string) {
     await this.assertTripMember(tripId, userId);
-    return this.members.findBy({ tripId, status: "joined" });
+    const members = await this.members.findBy({ tripId, status: "joined" });
+    return this.withUsers(members);
   }
 
   async setShareLocation(userId: string, tripId: string, enabled: boolean) {
