@@ -16,6 +16,7 @@ import { UsersModule } from "./users/users.module";
 import { LocationsModule } from "./locations/locations.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { HealthModule } from "./health/health.module";
+import { RoomsModule } from "./rooms/rooms.module";
 import { shouldUseDatabaseSsl } from "./config/env";
 
 @Module({
@@ -57,7 +58,8 @@ import { shouldUseDatabaseSsl } from "./config/env";
     CheckpointsModule,
     CameraPointsModule,
     AdminModule,
-    HealthModule
+    HealthModule,
+    RoomsModule
   ]
 })
 export class AppModule {}

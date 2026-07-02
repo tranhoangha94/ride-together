@@ -189,8 +189,47 @@ a {
   min-width: 0;
 }
 
+.locate-btn {
+  position: absolute;
+  z-index: 1000;
+  right: 12px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #1570ef;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.locate-btn-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #1570ef;
+}
+
 .room-sidebar {
   overflow-y: auto;
+}
+
+.member-label {
+  background: #101828 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.member-label::before {
+  border-top-color: #101828 !important;
 }
 
 @media (max-width: 720px) {

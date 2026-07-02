@@ -1,15 +1,16 @@
 "use client";
 
 import L from "leaflet";
-import { useEffect } from "react";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import { MemberLocation, SafetyPoint } from "../lib/types";
+import { useEffect, useState } from "react";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { ParticipantLocation, SafetyPoint } from "../lib/types";
 
 type Props = {
   center: { lat: number; lng: number };
-  members: MemberLocation[];
-  leaderId?: string;
+  members: ParticipantLocation[];
+  leaderNickname?: string;
   safetyPoints: SafetyPoint[];
+  selfId?: string | null;
 };
 
 function dotIcon(color: string, size: number) {
@@ -26,16 +27,39 @@ const MEMBER_ICON = dotIcon("#12B76A", 20);
 const CAMERA_ICON = dotIcon("#D92D20", 14);
 const SIGNAL_ICON = dotIcon("#DC6803", 14);
 
-function RecenterOnChange({ center }: { center: { lat: number; lng: number } }) {
+// Follows `target` (the rider's own position) while `following` is on. As
+// soon as the rider drags the map themselves, following turns off so their
+// pan/zoom isn't yanked back on the next location update.
+function FollowController({
+  target,
+  following,
+  onUserDrag
+}: {
+  target: { lat: number; lng: number } | null;
+  following: boolean;
+  onUserDrag: () => void;
+}) {
   const map = useMap();
+
   useEffect(() => {
-    map.setView(center, map.getZoom(), { animate: true });
+    if (following && target) {
+      map.setView(target, Math.max(map.getZoom(), 16), { animate: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lat, center.lng]);
+  }, [target?.lat, target?.lng, following]);
+
+  useMapEvents({
+    dragstart: onUserDrag
+  });
+
   return null;
 }
 
-export function RoomMap({ center, members, leaderId, safetyPoints }: Props) {
+export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId }: Props) {
+  const [following, setFollowing] = useState(true);
+  const self = selfId ? members.find((m) => m.participantId === selfId) : undefined;
+  const followTarget = self ? { lat: self.lat, lng: self.lng } : null;
+
   return (
     <div className="room-map">
       <MapContainer center={center} zoom={15} style={{ width: "100%", height: "100%" }}>
@@ -43,15 +67,21 @@ export function RoomMap({ center, members, leaderId, safetyPoints }: Props) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <RecenterOnChange center={center} />
+        <FollowController target={followTarget} following={following} onUserDrag={() => setFollowing(false)} />
         {members.map((member) => (
           <Marker
-            key={member.userId}
+            key={member.participantId}
             position={[member.lat, member.lng]}
-            icon={member.userId === leaderId ? LEADER_ICON : MEMBER_ICON}
+            icon={member.nickname === leaderNickname ? LEADER_ICON : MEMBER_ICON}
+            // Riders bunched up together will have overlapping name tags;
+            // tapping a dot brings its tag to the front so it's readable.
+            eventHandlers={{ click: (e) => e.target.bringToFront() }}
           >
+            <Tooltip permanent direction="top" offset={[0, -12]} className="member-label">
+              {member.nickname}
+            </Tooltip>
             <Popup>
-              {member.displayName} · {Math.round(member.speed ?? 0)} km/h
+              {member.nickname} · {Math.round(member.speed ?? 0)} km/h
             </Popup>
           </Marker>
         ))}
@@ -65,6 +95,12 @@ export function RoomMap({ center, members, leaderId, safetyPoints }: Props) {
           </Marker>
         ))}
       </MapContainer>
+
+      {!following && followTarget ? (
+        <button className="locate-btn" onClick={() => setFollowing(true)} aria-label="Về vị trí của tôi">
+          <span className="locate-btn-dot" />
+        </button>
+      ) : null}
     </div>
   );
 }
