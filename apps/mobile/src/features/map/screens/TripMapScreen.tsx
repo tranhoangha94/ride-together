@@ -13,6 +13,7 @@ import { MemberBottomSheet, MarkerMember } from "../components/MemberBottomSheet
 import { MemberMarker } from "../components/MemberMarker";
 import { SafetyPointMarker } from "../components/SafetyPointMarker";
 import { SafetyClusterMarker } from "../components/SafetyClusterMarker";
+import { SafetyPointList } from "../components/SafetyPointList";
 import { fetchSafetyPointsFromOverpass, SafetyPoint } from "../utils/safetyPoints";
 import { adjustMapZoom, centerMapOn, resetMapNorth } from "../utils/mapCamera";
 import { clusterSafetyPoints, deltaFromZoomBucket, SafetyCluster, zoomBucketFromDelta } from "../utils/clusterPoints";
@@ -31,6 +32,7 @@ export function TripMapScreen({ route, navigation }: Props) {
   const [lastRegion, setLastRegion] = useState<Region | null>(null);
   const [showSignals, setShowSignals] = useState(true);
   const [showCameras, setShowCameras] = useState(true);
+  const [showSafetyList, setShowSafetyList] = useState(false);
   const [members, setMembers] = useState<Record<string, MarkerMember>>(
     isDemo
       ? {
@@ -283,8 +285,13 @@ export function TripMapScreen({ route, navigation }: Props) {
     void fetchSafetyPointsForViewport({ lat: region.latitude, lng: region.longitude, radius });
   }
 
-  const cameraCount = safetyPoints.filter((point) => point.type === "camera").length;
-  const signalCount = safetyPoints.filter((point) => point.type === "traffic_signal").length;
+  const cameraCount = visibleSafetyPoints.filter((point) => point.type === "camera").length;
+  const signalCount = visibleSafetyPoints.filter((point) => point.type === "traffic_signal").length;
+
+  const handleSelectSafetyPoint = useCallback((point: SafetyPoint) => {
+    setShowSafetyList(false);
+    void centerMapOn(mapRef, point.lat, point.lng);
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -338,14 +345,27 @@ export function TripMapScreen({ route, navigation }: Props) {
         onToggleCameras={() => setShowCameras((v) => !v)}
       />
 
-      <View style={styles.statsBar}>
+      <Pressable
+        style={styles.statsBar}
+        onPress={() => setShowSafetyList(true)}
+        disabled={safetyLoading || visibleSafetyPoints.length === 0}
+        accessibilityRole="button"
+        accessibilityLabel="Xem danh sách điểm đèn giao thông và camera gần đây"
+      >
         <Text style={styles.statsText}>
           {safetyLoading ? "Đang tải điểm an toàn..." : `${cameraCount} camera · ${signalCount} đèn`}
         </Text>
-      </View>
+      </Pressable>
 
       <SOSButton onPress={triggerSos} />
       <MemberBottomSheet members={memberList} onSelectMember={handleSelectMember} />
+
+      <SafetyPointList
+        visible={showSafetyList}
+        points={visibleSafetyPoints}
+        onClose={() => setShowSafetyList(false)}
+        onSelectPoint={handleSelectSafetyPoint}
+      />
     </View>
   );
 }
