@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Marker } from "react-native-maps";
 import { SafetyPoint } from "../utils/safetyPoints";
@@ -8,12 +8,21 @@ type Props = { point: SafetyPoint };
 
 function SafetyPointMarkerBase({ point }: Props) {
   const isCamera = point.type === "camera";
+  // Custom-view markers can snapshot as blank on Android if tracksViewChanges is
+  // turned off before the icon has actually finished its first paint. Keep it on
+  // for one frame after mount, then freeze the snapshot for performance.
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setTracksViewChanges(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <Marker
       coordinate={{ latitude: point.lat, longitude: point.lng }}
       title={point.title}
       description={point.description ?? undefined}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
       anchor={{ x: 0.5, y: 0.5 }}
     >
       <View style={[styles.bubble, { borderColor: isCamera ? "#D92D20" : "#DC6803" }]}>

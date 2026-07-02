@@ -8,5 +8,6 @@ build
 .env.local
 coverage
 *.log
+*.tsbuildinfo
 android
 ios

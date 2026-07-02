@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
+import { User } from "../users/user.entity";
 import { makeInviteCode } from "../common/utils/invite-code";
 import { CreateTeamDto, JoinTeamDto } from "./dto";
 import { TeamMember } from "./team-member.entity";
@@ -10,15 +11,26 @@ import { Team } from "./team.entity";
 export class TeamsService {
   constructor(
     @InjectRepository(Team) private readonly teams: Repository<Team>,
-    @InjectRepository(TeamMember) private readonly members: Repository<TeamMember>
+    @InjectRepository(TeamMember) private readonly members: Repository<TeamMember>,
+    @InjectRepository(User) private readonly users: Repository<User>
   ) {}
+
+  private async withUsers(members: TeamMember[]) {
+    if (members.length === 0) return [];
+    const users = await this.users.findBy({ id: In(members.map((m) => m.userId)) });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return members.map((member) => {
+      const user = byId.get(member.userId);
+      return { ...member, user: user ? { id: user.id, displayName: user.displayName, avatarUrl: user.avatarUrl } : undefined };
+    });
+  }
 
   async create(userId: string, dto: CreateTeamDto) {
     const team = await this.teams.save(
       this.teams.create({
         ...dto,
         ownerId: userId,
-        inviteCode: makeInviteCode("TEAM")
+        inviteCode: makeInviteCode()
       })
     );
     await this.members.save(this.members.create({ teamId: team.id, userId, role: "owner" }));
@@ -38,7 +50,7 @@ export class TeamsService {
     await this.assertMember(teamId, userId);
     const team = await this.teams.findOneByOrFail({ id: teamId });
     const members = await this.members.findBy({ teamId, status: "active" });
-    return { team, members };
+    return { team, members: await this.withUsers(members) };
   }
 
   async invite(userId: string, teamId: string) {

@@ -5,12 +5,12 @@
   "workspaces": [
     "apps/backend",
     "apps/mobile",
-    "apps/admin-web",
+    "apps/web",
     "packages/shared-contracts"
   ],
   "scripts": {
     "dev:backend": "npm --workspace apps/backend run start:dev",
-    "dev:admin": "npm --workspace apps/admin-web run dev",
+    "dev:web": "npm --workspace apps/web run dev",
     "lint": "npm --workspaces run lint",
     "typecheck": "npm --workspaces run typecheck"
   },

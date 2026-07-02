@@ -83,7 +83,7 @@ The current project has been checked with:
 npm --workspace apps/backend run typecheck
 npm --workspace apps/backend run build
 npm --workspace apps/mobile run typecheck
-npm --workspace apps/admin-web run typecheck
+npm --workspace apps/web run typecheck
 ```
 
 ## API and realtime contracts

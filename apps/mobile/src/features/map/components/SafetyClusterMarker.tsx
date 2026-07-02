@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Marker } from "react-native-maps";
 import { SafetyCluster } from "../utils/clusterPoints";
@@ -7,10 +7,18 @@ type Props = { cluster: SafetyCluster; onPress: (cluster: SafetyCluster) => void
 
 function SafetyClusterMarkerBase({ cluster, onPress }: Props) {
   const dominant = cluster.cameraCount >= cluster.signalCount ? "#D92D20" : "#DC6803";
+  // See SafetyPointMarker: custom-view markers can snapshot blank on Android if
+  // tracksViewChanges is turned off before the first paint completes.
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setTracksViewChanges(false), 300);
+    return () => clearTimeout(timer);
+  }, [cluster.id]);
+
   return (
     <Marker
       coordinate={{ latitude: cluster.lat, longitude: cluster.lng }}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
       onPress={() => onPress(cluster)}
     >
       <View style={[styles.bubble, { borderColor: dominant }]}>

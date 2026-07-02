@@ -1,5 +1,5 @@
-import { randomBytes } from "crypto";
+import { randomInt } from "crypto";
 
-export function makeInviteCode(prefix: string) {
-  return `${prefix}-${randomBytes(4).toString("hex").toUpperCase()}`;
+export function makeInviteCode() {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }

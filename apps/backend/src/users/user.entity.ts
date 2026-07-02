@@ -13,8 +13,11 @@ export class User {
   @Column({ nullable: true, unique: true })
   phone?: string;
 
-  @Column({ name: "password_hash" })
-  passwordHash!: string;
+  @Column({ name: "password_hash", nullable: true })
+  passwordHash?: string;
+
+  @Column({ name: "google_id", nullable: true, unique: true })
+  googleId?: string;
 
   @Column({ name: "display_name" })
   displayName!: string;
