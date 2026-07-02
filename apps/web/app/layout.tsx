@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
-import { AuthProvider } from "../lib/auth-context";
 import { NavBar } from "../components/NavBar";
 
 export const metadata = {
@@ -13,10 +12,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="vi">
       <body>
-        <AuthProvider>
-          <NavBar />
-          {children}
-        </AuthProvider>
+        <NavBar />
+        {children}
       </body>
     </html>
   );
