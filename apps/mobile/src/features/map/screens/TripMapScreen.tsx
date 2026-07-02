@@ -1,16 +1,21 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Region, UrlTile } from "react-native-maps";
+import MapView, { Region } from "react-native-maps";
 import { RootStackParamList } from "../../../navigation/types";
 import { api } from "../../../core/api/client";
 import { getTripSocket } from "../../../core/realtime/socket";
 import { getCurrentTripLocation, requestTripLocationPermission, watchTripLocation } from "../../../core/location/locationService";
 import { SOSButton } from "../../sos/components/SOSButton";
-import { LiveLeafletMap, LiveLeafletMapHandle } from "../components/LiveLeafletMap";
 import { MapLegend } from "../components/MapLegend";
+import { NativeTripMap } from "../components/NativeTripMap";
 import { MemberBottomSheet, MarkerMember } from "../components/MemberBottomSheet";
+import { MemberMarker } from "../components/MemberMarker";
+import { SafetyPointMarker } from "../components/SafetyPointMarker";
+import { SafetyClusterMarker } from "../components/SafetyClusterMarker";
 import { fetchSafetyPointsFromOverpass, SafetyPoint } from "../utils/safetyPoints";
+import { adjustMapZoom, centerMapOn, resetMapNorth } from "../utils/mapCamera";
+import { clusterSafetyPoints, deltaFromZoomBucket, SafetyCluster, zoomBucketFromDelta } from "../utils/clusterPoints";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TripMap">;
 
@@ -18,11 +23,14 @@ export function TripMapScreen({ route, navigation }: Props) {
   const { tripId } = route.params;
   const isDemo = route.params.demo === true;
   const mapRef = useRef<MapView>(null);
-  const demoMapRef = useRef<LiveLeafletMapHandle>(null);
   const safetyFetchRef = useRef<{ key: string; timer?: ReturnType<typeof setTimeout> }>({ key: "" });
   const [shareEnabled, setShareEnabled] = useState(false);
+  const [shareUpdating, setShareUpdating] = useState(false);
   const [safetyPoints, setSafetyPoints] = useState<SafetyPoint[]>([]);
   const [safetyLoading, setSafetyLoading] = useState(false);
+  const [lastRegion, setLastRegion] = useState<Region | null>(null);
+  const [showSignals, setShowSignals] = useState(true);
+  const [showCameras, setShowCameras] = useState(true);
   const [members, setMembers] = useState<Record<string, MarkerMember>>(
     isDemo
       ? {
@@ -34,6 +42,31 @@ export function TripMapScreen({ route, navigation }: Props) {
   );
   const memberList = useMemo(() => Object.values(members), [members]);
   const leader = memberList[0];
+
+  const zoomBucket = useMemo(() => zoomBucketFromDelta(lastRegion?.latitudeDelta ?? 0.08), [lastRegion?.latitudeDelta]);
+  const visibleSafetyPoints = useMemo(
+    () =>
+      safetyPoints.filter((point) =>
+        point.type === "camera" ? showCameras : showSignals
+      ),
+    [safetyPoints, showCameras, showSignals]
+  );
+  const safetyItems = useMemo(
+    () => clusterSafetyPoints(visibleSafetyPoints, deltaFromZoomBucket(zoomBucket)),
+    [visibleSafetyPoints, zoomBucket]
+  );
+
+  const handleClusterPress = useCallback((cluster: SafetyCluster) => {
+    mapRef.current?.animateToRegion(
+      {
+        latitude: cluster.lat,
+        longitude: cluster.lng,
+        latitudeDelta: Math.max(0.003, deltaFromZoomBucket(zoomBucket) / 4),
+        longitudeDelta: Math.max(0.003, deltaFromZoomBucket(zoomBucket) / 4)
+      },
+      300
+    );
+  }, [zoomBucket]);
 
   const fetchSafetyPointsForViewport = useCallback(async ({ lat, lng, radius }: { lat: number; lng: number; radius: number }) => {
     const normalizedRadius = Math.min(5000, Math.max(800, Math.round(radius)));
@@ -74,9 +107,14 @@ export function TripMapScreen({ route, navigation }: Props) {
         await fetchSafetyPointsForViewport({ lat, lng, radius: 2500 });
       }
 
+      async function focusMap(lat: number, lng: number) {
+        await centerMapOn(mapRef, lat, lng);
+        await loadSafetyAt(lat, lng);
+      }
+
       const granted = await requestTripLocationPermission();
       if (!granted) {
-        await loadSafetyAt(defaultLat, defaultLng);
+        await focusMap(defaultLat, defaultLng);
         return;
       }
 
@@ -90,9 +128,9 @@ export function TripMapScreen({ route, navigation }: Props) {
           rider1: { userId: "Rider 1", lat: lat + 0.0032, lng: lng + 0.0027, speed: 39, recordedAt: new Date().toISOString() },
           rider2: { userId: "Rider 2", lat: lat - 0.0037, lng: lng - 0.0025, speed: 35, recordedAt: new Date().toISOString() }
         });
-        await loadSafetyAt(lat, lng);
+        await focusMap(lat, lng);
       } catch {
-        await loadSafetyAt(defaultLat, defaultLng);
+        await focusMap(defaultLat, defaultLng);
       }
     }
 
@@ -177,16 +215,23 @@ export function TripMapScreen({ route, navigation }: Props) {
 
   async function centerMe() {
     if (isDemo && leader) {
-      demoMapRef.current?.centerOn(leader.lat, leader.lng, 15);
+      await centerMapOn(mapRef, leader.lat, leader.lng);
       return;
     }
     const current = await getCurrentTripLocation();
-    mapRef.current?.animateToRegion({
-      latitude: current.coords.latitude,
-      longitude: current.coords.longitude,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02
-    });
+    await centerMapOn(mapRef, current.coords.latitude, current.coords.longitude);
+  }
+
+  async function resetNorth() {
+    await resetMapNorth(mapRef);
+  }
+
+  async function zoomIn() {
+    await adjustMapZoom(mapRef, lastRegion, 1);
+  }
+
+  async function zoomOut() {
+    await adjustMapZoom(mapRef, lastRegion, -1);
   }
 
   async function triggerSos() {
@@ -210,14 +255,27 @@ export function TripMapScreen({ route, navigation }: Props) {
       setShareEnabled(next);
       return;
     }
-    await api(`/trips/${tripId}/share-location`, {
-      method: "PATCH",
-      body: JSON.stringify({ enabled: next })
-    });
     setShareEnabled(next);
+    setShareUpdating(true);
+    try {
+      await api(`/trips/${tripId}/share-location`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: next })
+      });
+    } catch {
+      setShareEnabled(!next);
+      Alert.alert("Không thể cập nhật", "Bật/tắt chia sẻ vị trí thất bại, vui lòng thử lại.");
+    } finally {
+      setShareUpdating(false);
+    }
   }
 
-  function handleLiveRegionChange(region: Region) {
+  const handleSelectMember = useCallback((member: MarkerMember) => {
+    void centerMapOn(mapRef, member.lat, member.lng);
+  }, []);
+
+  function handleRegionChange(region: Region) {
+    setLastRegion(region);
     const radius = Math.max(
       500,
       Math.min(5000, Math.round(Math.max(region.latitudeDelta, region.longitudeDelta) * 111_000 * 0.6))
@@ -230,50 +288,55 @@ export function TripMapScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
-      {isDemo ? (
-        <LiveLeafletMap ref={demoMapRef} members={memberList} safetyPoints={safetyPoints} onViewportChanged={fetchSafetyPointsForViewport} />
-      ) : (
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFill}
-          mapType="none"
-          initialRegion={{ latitude: 10.7769, longitude: 106.7009, latitudeDelta: 0.08, longitudeDelta: 0.08 }}
-          showsUserLocation
-          onRegionChangeComplete={handleLiveRegionChange}
-        >
-          <UrlTile maximumZ={19} tileSize={256} urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {memberList.map((member) => (
-            <Marker
-              key={member.userId}
-              coordinate={{ latitude: member.lat, longitude: member.lng }}
-              title={member.userId}
-              description={`${Math.round(member.speed ?? 0)} km/h`}
-              pinColor="#12B76A"
-            />
-          ))}
-          {safetyPoints.map((point) => (
-            <Marker
-              key={point.id}
-              coordinate={{ latitude: point.lat, longitude: point.lng }}
-              title={point.title}
-              description={point.description ?? undefined}
-              pinColor={point.type === "camera" ? "#D92D20" : "#DC6803"}
-            />
-          ))}
-        </MapView>
-      )}
+      <NativeTripMap
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={{ latitude: 10.7769, longitude: 106.7009, latitudeDelta: 0.08, longitudeDelta: 0.08 }}
+        onRegionChangeComplete={handleRegionChange}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onResetNorth={resetNorth}
+        onCenterMe={centerMe}
+      >
+        {memberList.map((member, index) => (
+          <MemberMarker key={member.userId} member={member} isLeader={index === 0} />
+        ))}
+        {safetyItems.map((item) =>
+          item.kind === "point" ? (
+            <SafetyPointMarker key={item.point.id} point={item.point} />
+          ) : (
+            <SafetyClusterMarker key={item.cluster.id} cluster={item.cluster} onPress={handleClusterPress} />
+          )
+        )}
+      </NativeTripMap>
 
       <View style={styles.topBar}>
-        <Pressable style={styles.navButton} onPress={() => navigation.goBack()}>
+        <Pressable
+          style={styles.navButton}
+          onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace("Home"))}
+        >
           <Text style={styles.navText}>← Quay lại</Text>
         </Pressable>
         {isDemo ? <Text style={styles.demoBadge}>Demo</Text> : null}
-        <Pressable style={[styles.shareButton, shareEnabled && styles.shareButtonOn]} onPress={toggleShareLocation}>
-          <Text style={shareEnabled ? styles.shareTextOn : styles.shareText}>{shareEnabled ? "Đang chia sẻ" : "Chia sẻ vị trí"}</Text>
+        <Pressable
+          style={[styles.shareButton, shareEnabled && styles.shareButtonOn]}
+          onPress={toggleShareLocation}
+          disabled={shareUpdating}
+          accessibilityRole="button"
+          accessibilityLabel={shareEnabled ? "Đang chia sẻ vị trí, chạm để tắt" : "Chạm để chia sẻ vị trí"}
+        >
+          <Text style={shareEnabled ? styles.shareTextOn : styles.shareText}>
+            {shareUpdating ? "Đang cập nhật..." : shareEnabled ? "Đang chia sẻ" : "Chia sẻ vị trí"}
+          </Text>
         </Pressable>
       </View>
 
-      <MapLegend />
+      <MapLegend
+        showSignals={showSignals}
+        showCameras={showCameras}
+        onToggleSignals={() => setShowSignals((v) => !v)}
+        onToggleCameras={() => setShowCameras((v) => !v)}
+      />
 
       <View style={styles.statsBar}>
         <Text style={styles.statsText}>
@@ -281,17 +344,15 @@ export function TripMapScreen({ route, navigation }: Props) {
         </Text>
       </View>
 
-      <Pressable style={styles.centerButton} onPress={centerMe}>
-        <Text style={styles.centerText}>📍 Vị trí tôi</Text>
-      </Pressable>
       <SOSButton onPress={triggerSos} />
-      <MemberBottomSheet members={memberList} />
+      <MemberBottomSheet members={memberList} onSelectMember={handleSelectMember} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: "#E7F0EA" },
+  map: { flex: 1, backgroundColor: "#E7F0EA" },
   topBar: { position: "absolute", top: 52, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   navButton: { backgroundColor: "#FFF", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   navText: { fontWeight: "700", color: "#344054" },
@@ -309,7 +370,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8
   },
-  statsText: { fontSize: 11, fontWeight: "600", color: "#475467" },
-  centerButton: { position: "absolute", right: 18, bottom: 252, backgroundColor: "#FFF", paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10 },
-  centerText: { fontWeight: "700", color: "#344054", fontSize: 13 }
+  statsText: { fontSize: 11, fontWeight: "600", color: "#475467" }
 });

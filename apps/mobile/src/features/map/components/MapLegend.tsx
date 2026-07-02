@@ -1,6 +1,14 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { CameraGlyph, TrafficLightGlyph } from "./SafetyIcons";
 
-export function MapLegend() {
+type Props = {
+  showSignals: boolean;
+  showCameras: boolean;
+  onToggleSignals: () => void;
+  onToggleCameras: () => void;
+};
+
+export function MapLegend({ showSignals, showCameras, onToggleSignals, onToggleCameras }: Props) {
   return (
     <View style={styles.legend}>
       <View style={styles.row}>
@@ -11,14 +19,28 @@ export function MapLegend() {
         <View style={[styles.dot, styles.member]} />
         <Text style={styles.label}>Thành viên</Text>
       </View>
-      <View style={styles.row}>
-        <View style={[styles.dot, styles.signal]} />
-        <Text style={styles.label}>Đèn giao thông</Text>
-      </View>
-      <View style={styles.row}>
-        <View style={[styles.dot, styles.camera]} />
-        <Text style={styles.label}>Camera</Text>
-      </View>
+      <Pressable
+        style={styles.row}
+        onPress={onToggleSignals}
+        accessibilityRole="button"
+        accessibilityLabel={showSignals ? "Ẩn đèn giao thông trên bản đồ" : "Hiện đèn giao thông trên bản đồ"}
+      >
+        <View style={[styles.iconSwatch, !showSignals && styles.iconSwatchOff]}>
+          <TrafficLightGlyph size={13} />
+        </View>
+        <Text style={[styles.label, !showSignals && styles.labelOff]}>Đèn giao thông</Text>
+      </Pressable>
+      <Pressable
+        style={styles.row}
+        onPress={onToggleCameras}
+        accessibilityRole="button"
+        accessibilityLabel={showCameras ? "Ẩn camera trên bản đồ" : "Hiện camera trên bản đồ"}
+      >
+        <View style={[styles.iconSwatch, !showCameras && styles.iconSwatchOff]}>
+          <CameraGlyph size={13} />
+        </View>
+        <Text style={[styles.label, !showCameras && styles.labelOff]}>Camera</Text>
+      </Pressable>
     </View>
   );
 }
@@ -42,7 +64,8 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   leader: { backgroundColor: "#1570EF" },
   member: { backgroundColor: "#12B76A" },
-  signal: { backgroundColor: "#DC6803" },
-  camera: { backgroundColor: "#D92D20" },
-  label: { fontSize: 11, fontWeight: "600", color: "#344054" }
+  iconSwatch: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
+  iconSwatchOff: { opacity: 0.35 },
+  label: { fontSize: 11, fontWeight: "600", color: "#344054" },
+  labelOff: { color: "#98A2B3", textDecorationLine: "line-through" }
 });
