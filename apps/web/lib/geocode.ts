@@ -13,21 +13,73 @@ export async function searchPlaces(query: string): Promise<PlaceResult[]> {
   return json.map((item) => ({ label: item.display_name, lat: Number(item.lat), lng: Number(item.lon) }));
 }
 
+export type RouteStep = {
+  instruction: string;
+  distanceM: number;
+  location: { lat: number; lng: number };
+};
+
+export type RouteResult = {
+  coordinates: [number, number][];
+  steps: RouteStep[];
+  totalDistanceM: number;
+  totalDurationS: number;
+};
+
+const MANEUVER_MODIFIER_TEXT: Record<string, string> = {
+  left: "Rẽ trái",
+  right: "Rẽ phải",
+  "slight left": "Rẽ nhẹ sang trái",
+  "slight right": "Rẽ nhẹ sang phải",
+  "sharp left": "Rẽ gắt sang trái",
+  "sharp right": "Rẽ gắt sang phải",
+  straight: "Đi thẳng",
+  uturn: "Quay đầu"
+};
+
+function maneuverInstruction(maneuver: { type: string; modifier?: string }, streetName: string): string {
+  const street = streetName ? ` vào ${streetName}` : "";
+  if (maneuver.type === "depart") return `Xuất phát${street}`;
+  if (maneuver.type === "arrive") return "Bạn đã đến nơi";
+  if (maneuver.type === "roundabout" || maneuver.type === "rotary") return `Đi vào vòng xuyến${street}`;
+  const modifierText = MANEUVER_MODIFIER_TEXT[maneuver.modifier ?? "straight"] ?? "Đi thẳng";
+  return `${modifierText}${street}`;
+}
+
 // OSRM public demo server - free, no API key. "driving" is the closest
 // available profile to a motorbike (OSRM's public instance has no
 // motorcycle profile).
 export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number }
-): Promise<[number, number][] | null> {
-  const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometry=geojson`;
+): Promise<RouteResult | null> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=true`;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = await res.json();
-    const coords: [number, number][] | undefined = json?.routes?.[0]?.geometry?.coordinates;
+    const route = json?.routes?.[0];
+    const coords: [number, number][] | undefined = route?.geometry?.coordinates;
     if (!coords) return null;
-    return coords.map(([lng, lat]) => [lat, lng]);
+
+    const rawSteps: Array<{
+      distance: number;
+      name: string;
+      maneuver: { type: string; modifier?: string; location: [number, number] };
+    }> = route?.legs?.[0]?.steps ?? [];
+
+    const steps: RouteStep[] = rawSteps.map((step) => ({
+      instruction: maneuverInstruction(step.maneuver, step.name),
+      distanceM: step.distance,
+      location: { lat: step.maneuver.location[1], lng: step.maneuver.location[0] }
+    }));
+
+    return {
+      coordinates: coords.map(([lng, lat]) => [lat, lng]),
+      steps,
+      totalDistanceM: route.distance ?? 0,
+      totalDurationS: route.duration ?? 0
+    };
   } catch {
     return null;
   }
