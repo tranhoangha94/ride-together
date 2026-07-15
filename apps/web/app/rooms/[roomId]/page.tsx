@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { api, ApiError } from "../../../lib/api";
 import { getNickname, getRoomSocket } from "../../../lib/room-socket";
-import { LobbyParticipant, ParticipantLocation, Room, SafetyPoint } from "../../../lib/types";
+import { PlaceResult } from "../../../lib/geocode";
+import { Destination, LobbyParticipant, ParticipantLocation, Room, SafetyPoint } from "../../../lib/types";
+import { DestinationPicker } from "../../../components/DestinationPicker";
 
 const RoomMap = dynamic(() => import("../../../components/RoomMap").then((m) => m.RoomMap), { ssr: false });
 
@@ -22,6 +24,7 @@ export default function RoomPage() {
   const [phase, setPhase] = useState<"lobby" | "map">("lobby");
   const [lobby, setLobby] = useState<Record<string, LobbyParticipant>>({});
   const [starting, setStarting] = useState(false);
+  const [destination, setDestination] = useState<Destination | null>(null);
 
   const [locations, setLocations] = useState<Record<string, ParticipantLocation>>({});
   const [safetyPoints, setSafetyPoints] = useState<SafetyPoint[]>([]);
@@ -42,6 +45,9 @@ export default function RoomPage() {
       .then((r) => {
         setRoom(r);
         if (r.started) setPhase("map");
+        if (r.destinationLat != null && r.destinationLng != null) {
+          setDestination({ label: r.destinationLabel ?? "", lat: r.destinationLat, lng: r.destinationLng });
+        }
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Không tìm thấy phòng."));
   }, [roomId, nickname, router]);
@@ -55,9 +61,10 @@ export default function RoomPage() {
       socket.emit(
         "join_room",
         { roomId },
-        (res: { ok: boolean; started?: boolean; lobby?: LobbyParticipant[] }) => {
+        (res: { ok: boolean; started?: boolean; lobby?: LobbyParticipant[]; destination?: Destination | null }) => {
           if (!res.ok) return;
           if (res.started) setPhase("map");
+          if (res.destination) setDestination(res.destination);
           if (res.lobby) {
             setLobby((current) => {
               const next = { ...current };
@@ -89,6 +96,7 @@ export default function RoomPage() {
     });
 
     socket.on("room_started", () => setPhase("map"));
+    socket.on("destination_updated", (d: Destination) => setDestination(d));
 
     socket.on("member_location_updated", (event: ParticipantLocation) => {
       setLocations((current) => ({ ...current, [event.participantId]: event }));
@@ -112,6 +120,7 @@ export default function RoomPage() {
       socket.off("lobby_participant_joined");
       socket.off("lobby_participant_left");
       socket.off("room_started");
+      socket.off("destination_updated");
       socket.off("member_location_updated");
       socket.off("member_offline");
       socket.off("sos_alert");
@@ -122,6 +131,11 @@ export default function RoomPage() {
     setStarting(true);
     const socket = getRoomSocket(nickname);
     socket.emit("start_room", { roomId });
+  }
+
+  function handleSelectDestination(place: PlaceResult) {
+    const socket = getRoomSocket(nickname);
+    socket.emit("set_destination", { roomId, label: place.label, lat: place.lat, lng: place.lng });
   }
 
   const fetchSafetyPoints = useCallback(async (lat: number, lng: number) => {
@@ -220,12 +234,18 @@ export default function RoomPage() {
     const participants = Object.values(lobby);
     return (
       <main className="auth-shell">
+        <button className="back-link" onClick={() => router.push("/")}>
+          ← Quay lại
+        </button>
         <div className="card">
-          <h2>{room.destination}</h2>
+          <h2>{room.name}</h2>
           <p className="hint">
             Mã phòng: <span className="invite-code">{room.code}</span> — chia sẻ mã này cho cả đoàn.
           </p>
         </div>
+
+        <DestinationPicker destination={destination} canEdit={isLeader} onSelect={handleSelectDestination} />
+
         <div className="card">
           <h2>Đã vào phòng ({participants.length})</h2>
           {participants.map((p) => (
@@ -259,15 +279,18 @@ export default function RoomPage() {
         leaderNickname={room.leaderNickname}
         safetyPoints={safetyPoints}
         selfId={selfId}
+        destination={destination}
       />
 
       <div className="room-sidebar">
         <div className="card">
-          <h2>{room.destination}</h2>
+          <h2>{room.name}</h2>
           <p className="hint">
             Mã phòng: <span className="invite-code">{room.code}</span>
           </p>
         </div>
+
+        <DestinationPicker destination={destination} canEdit={isLeader} onSelect={handleSelectDestination} />
 
         <div className="card">
           <button

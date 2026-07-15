@@ -1,9 +1,12 @@
 export type Room = {
   id: string;
   code: string;
-  destination: string;
+  name: string;
   leaderNickname: string;
   started: boolean;
+  destinationLabel?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
   createdAt: string;
 };
 
@@ -11,6 +14,8 @@ export type LobbyParticipant = {
   participantId: string;
   nickname: string;
 };
+
+export type Destination = { label: string; lat: number; lng: number };
 
 export type SafetyPoint = {
   id: string;

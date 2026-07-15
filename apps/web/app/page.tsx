@@ -11,7 +11,7 @@ export default function Home() {
   // Seeded empty (not from localStorage) so server and first client render
   // match; the real saved nickname is filled in after mount.
   const [nickname, setNicknameInput] = useState("");
-  const [destination, setDestination] = useState("");
+  const [roomName, setRoomName] = useState("");
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -29,7 +29,7 @@ export default function Home() {
       setNickname(nickname);
       const room = await api<Room>("/rooms", {
         method: "POST",
-        body: JSON.stringify({ destination, nickname })
+        body: JSON.stringify({ name: roomName, nickname })
       });
       router.push(`/rooms/${room.id}`);
     } catch (err) {
@@ -78,18 +78,18 @@ export default function Home() {
         <h2>Tạo phòng mới</h2>
         <form onSubmit={handleCreate}>
           <div className="form-field">
-            <label htmlFor="destination">Điểm đến</label>
+            <label htmlFor="roomName">Tên phòng</label>
             <input
-              id="destination"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="Vd: Hà Giang, Mộc Châu..."
+              id="roomName"
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              placeholder="Vd: Team phượt cuối tuần"
               required
             />
           </div>
           {error ? <p className="error-text">{error}</p> : null}
           <button className="btn" type="submit" disabled={creating || !nickname} style={{ width: "100%" }}>
-            {creating ? "Đang tạo..." : "Xuất phát"}
+            {creating ? "Đang tạo..." : "Tạo phòng"}
           </button>
         </form>
       </div>

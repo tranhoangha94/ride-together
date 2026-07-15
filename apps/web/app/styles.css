@@ -78,6 +78,17 @@ a {
   padding: 0;
 }
 
+.back-link {
+  background: none;
+  border: none;
+  color: #344054;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-bottom: 4px;
+}
+
 .card {
   background: white;
   border: 1px solid #eaecf0;
@@ -149,7 +160,17 @@ a {
 
 .auth-shell {
   max-width: 380px;
-  margin: 64px auto;
+  margin: 24px auto;
+}
+
+@media (max-width: 480px) {
+  .auth-shell {
+    margin: 8px auto;
+  }
+
+  main {
+    padding: 16px 16px;
+  }
 }
 
 .list-item {
@@ -281,4 +302,48 @@ a {
 .status-ended {
   background: #f2f4f7;
   color: #667085;
+}
+
+.mini-map {
+  width: 100%;
+  height: 160px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #eaecf0;
+}
+
+.place-results {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.place-result-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f2f4f7;
+  font-size: 13px;
+  color: #344054;
+  cursor: pointer;
+}
+
+.place-result-item:last-child {
+  border-bottom: none;
+}
+
+.place-result-item:hover {
+  background: #f9fafb;
 }
