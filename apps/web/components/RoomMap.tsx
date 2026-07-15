@@ -25,10 +25,38 @@ function dotIcon(color: string, size: number) {
   });
 }
 
+function badgeIcon(svgInner: string, color: string, size = 26) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">${svgInner}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2]
+  });
+}
+
 const LEADER_ICON = dotIcon("#1570EF", 20);
 const MEMBER_ICON = dotIcon("#12B76A", 20);
-const CAMERA_ICON = dotIcon("#D92D20", 14);
-const SIGNAL_ICON = dotIcon("#DC6803", 14);
+
+// Camera glyph (surveillance camera silhouette) so a "camera phạt nguội"
+// marker reads at a glance instead of just being an unlabeled red dot.
+const CAMERA_ICON = badgeIcon(
+  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 8a2 2 0 0 1 2-2h2.5l1.2-1.6a1 1 0 0 1 .8-.4h5a1 1 0 0 1 .8.4L16.5 6H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
+    <circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.7"/>
+  </svg>`,
+  "#D92D20"
+);
+
+// Traffic-light glyph (three stacked lamps) for signal markers.
+const SIGNAL_ICON = badgeIcon(
+  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="7" y="2" width="10" height="20" rx="3" stroke="#fff" stroke-width="1.7"/>
+    <circle cx="12" cy="7.2" r="1.9" fill="#fff"/>
+    <circle cx="12" cy="12" r="1.9" fill="#fff"/>
+    <circle cx="12" cy="16.8" r="1.9" fill="#fff"/>
+  </svg>`,
+  "#DC6803"
+);
 const DESTINATION_ICON = L.divIcon({
   className: "",
   html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#D92D20;border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
