@@ -9,13 +9,22 @@ export class Room {
   code!: string;
 
   @Column()
-  destination!: string;
+  name!: string;
 
   @Column({ name: "leader_nickname" })
   leaderNickname!: string;
 
   @Column({ default: false })
   started!: boolean;
+
+  @Column({ name: "destination_label", nullable: true })
+  destinationLabel?: string;
+
+  @Column({ name: "destination_lat", type: "double precision", nullable: true })
+  destinationLat?: number;
+
+  @Column({ name: "destination_lng", type: "double precision", nullable: true })
+  destinationLng?: number;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

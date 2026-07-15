@@ -58,7 +58,12 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await client.join(`room:${body.roomId}`);
     client.to(`room:${body.roomId}`).emit("lobby_participant_joined", { participantId: client.id, nickname: client.nickname });
 
-    return { ok: true, started: room.started, lobby };
+    const destination =
+      room.destinationLat != null && room.destinationLng != null
+        ? { label: room.destinationLabel, lat: room.destinationLat, lng: room.destinationLng }
+        : null;
+
+    return { ok: true, started: room.started, lobby, destination };
   }
 
   @SubscribeMessage("leave_room")
@@ -73,6 +78,21 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.roomId) return { ok: false };
     await this.rooms.start(body.roomId);
     this.server.to(`room:${body.roomId}`).emit("room_started");
+    return { ok: true };
+  }
+
+  @SubscribeMessage("set_destination")
+  async setDestination(
+    @ConnectedSocket() client: RoomSocket,
+    @MessageBody() body: { roomId: string; label: string; lat: number; lng: number }
+  ) {
+    if (!client.roomId) return { ok: false };
+    const room = await this.rooms.findById(body.roomId);
+    if (client.nickname !== room.leaderNickname) return { ok: false, reason: "not_leader" };
+
+    await this.rooms.setDestination(body.roomId, body.label, body.lat, body.lng);
+    const destination = { label: body.label, lat: body.lat, lng: body.lng };
+    this.server.to(`room:${body.roomId}`).emit("destination_updated", destination);
     return { ok: true };
   }
 

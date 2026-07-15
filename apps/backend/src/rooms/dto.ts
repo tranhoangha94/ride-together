@@ -6,7 +6,7 @@ export class CreateRoomDto {
   @IsString()
   @MinLength(1)
   @MaxLength(80)
-  destination!: string;
+  name!: string;
 
   @ApiProperty()
   @IsString()

@@ -12,7 +12,7 @@ export class RoomsService {
   create(dto: CreateRoomDto) {
     return this.rooms.save(
       this.rooms.create({
-        destination: dto.destination,
+        name: dto.name,
         leaderNickname: dto.nickname,
         code: makeInviteCode()
       })
@@ -34,6 +34,14 @@ export class RoomsService {
   async start(id: string) {
     const room = await this.findById(id);
     room.started = true;
+    return this.rooms.save(room);
+  }
+
+  async setDestination(id: string, label: string, lat: number, lng: number) {
+    const room = await this.findById(id);
+    room.destinationLabel = label;
+    room.destinationLat = lat;
+    room.destinationLng = lng;
     return this.rooms.save(room);
   }
 }
