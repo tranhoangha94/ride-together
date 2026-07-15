@@ -3,7 +3,8 @@
 import L from "leaflet";
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
-import { fetchRoute } from "../lib/geocode";
+import { fetchRoute, RouteResult, RouteStep } from "../lib/geocode";
+import { distanceMeters } from "../lib/geo";
 import { Destination, ParticipantLocation, SafetyPoint } from "../lib/types";
 
 type Props = {
@@ -35,29 +36,30 @@ const DESTINATION_ICON = L.divIcon({
   iconAnchor: [11, 22]
 });
 
-function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
-}
-
 const ROUTE_REFETCH_METERS = 50;
 const ROUTE_REFETCH_MIN_MS = 10_000;
 
 // Draws a suggested route (via OSRM's free public routing) from the rider's
 // own position to the room's destination. Refetches only when the rider has
 // moved meaningfully or the destination changed, to stay light on the
-// public OSRM instance.
-function RouteLayer({ from, to }: { from: { lat: number; lng: number } | null; to: Destination | null }) {
-  const [route, setRoute] = useState<[number, number][] | null>(null);
+// public OSRM instance. Reports the full route (incl. turn-by-turn steps)
+// up to the parent so it can drive a Google-Maps-style navigation banner.
+function RouteLayer({
+  from,
+  to,
+  onRoute
+}: {
+  from: { lat: number; lng: number } | null;
+  to: Destination | null;
+  onRoute: (route: RouteResult | null) => void;
+}) {
+  const [route, setRoute] = useState<RouteResult | null>(null);
   const lastFetchRef = useRef<{ at: number; from: { lat: number; lng: number } } | null>(null);
 
   useEffect(() => {
     if (!from || !to) {
       setRoute(null);
+      onRoute(null);
       return;
     }
     const last = lastFetchRef.current;
@@ -65,18 +67,101 @@ function RouteLayer({ from, to }: { from: { lat: number; lng: number } | null; t
     if (last && now - last.at < ROUTE_REFETCH_MIN_MS && distanceMeters(last.from, from) < ROUTE_REFETCH_METERS) {
       return;
     }
-    lastFetchRef.current = { at: now, from };
     let cancelled = false;
-    fetchRoute(from, to).then((coords) => {
-      if (!cancelled) setRoute(coords);
+    fetchRoute(from, to).then((result) => {
+      // Only record this as "the last fetch" once it actually lands - if it
+      // got cancelled (e.g. React 18 Strict Mode's dev-only double-invoke of
+      // effects), the refetch-throttle above must not treat it as done, or
+      // the real, surviving effect run gets starved out and never retries.
+      if (!cancelled) {
+        lastFetchRef.current = { at: Date.now(), from };
+        setRoute(result);
+        onRoute(result);
+      }
     });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from?.lat, from?.lng, to?.lat, to?.lng]);
 
   if (!route) return null;
-  return <Polyline positions={route} pathOptions={{ color: "#1570EF", weight: 4, opacity: 0.6 }} />;
+  return <Polyline positions={route.coordinates} pathOptions={{ color: "#1570EF", weight: 4, opacity: 0.6 }} />;
+}
+
+const NEXT_STEP_ARRIVE_M = 40;
+
+function maneuverArrow(instruction: string): string {
+  if (instruction.includes("đến nơi")) return "🏁";
+  if (instruction.includes("vòng xuyến")) return "⟳";
+  if (instruction.includes("Quay đầu")) return "↩";
+  if (instruction.includes("gắt sang trái")) return "↙";
+  if (instruction.includes("gắt sang phải")) return "↘";
+  if (instruction.includes("nhẹ sang trái")) return "↖";
+  if (instruction.includes("nhẹ sang phải")) return "↗";
+  if (instruction.includes("Rẽ trái")) return "⬅";
+  if (instruction.includes("Rẽ phải")) return "➡";
+  return "⬆";
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+// Tracks which upcoming turn to show, Google-Maps-style: advances to the
+// next step once the rider gets within NEXT_STEP_ARRIVE_M of the current
+// step's maneuver point. Resets whenever a brand new route comes in.
+function useCurrentStep(steps: RouteStep[], position: { lat: number; lng: number } | null) {
+  const indexRef = useRef(1);
+  const [index, setIndex] = useState(1);
+
+  useEffect(() => {
+    indexRef.current = Math.min(1, Math.max(0, steps.length - 1));
+    setIndex(indexRef.current);
+  }, [steps]);
+
+  useEffect(() => {
+    if (!position || steps.length === 0) return;
+    let idx = indexRef.current;
+    while (idx < steps.length - 1 && distanceMeters(position, steps[idx].location) < NEXT_STEP_ARRIVE_M) {
+      idx++;
+    }
+    if (idx !== indexRef.current) {
+      indexRef.current = idx;
+      setIndex(idx);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position?.lat, position?.lng, steps]);
+
+  return steps[index] ?? null;
+}
+
+// Google-Maps-style turn-by-turn banner: big arrow + instruction + live
+// distance to the upcoming turn, overlaid on top of the map.
+function NavigationBanner({ steps, position }: { steps: RouteStep[]; position: { lat: number; lng: number } | null }) {
+  const step = useCurrentStep(steps, position);
+  if (!step || !position) return null;
+
+  const distance = distanceMeters(position, step.location);
+  return (
+    <div className="nav-banner">
+      <span className="nav-banner-arrow">{maneuverArrow(step.instruction)}</span>
+      <div className="nav-banner-text">
+        <div className="nav-banner-instruction">{step.instruction}</div>
+        <div className="nav-banner-distance">{formatDistance(distance)}</div>
+      </div>
+    </div>
+  );
+}
+
+function RouteSummaryBar({ route }: { route: RouteResult }) {
+  const minutes = Math.round(route.totalDurationS / 60);
+  return (
+    <div className="route-summary-bar">
+      {formatDistance(route.totalDistanceM)} · {minutes < 1 ? "dưới 1 phút" : `${minutes} phút`}
+    </div>
+  );
 }
 
 // Follows `target` (the rider's own position) while `following` is on. As
@@ -203,6 +288,7 @@ function MembersLayer({ members, leaderNickname }: { members: ParticipantLocatio
 
 export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId, destination }: Props) {
   const [following, setFollowing] = useState(true);
+  const [route, setRoute] = useState<RouteResult | null>(null);
   const self = selfId ? members.find((m) => m.participantId === selfId) : undefined;
   const followTarget = self ? { lat: self.lat, lng: self.lng } : null;
 
@@ -215,7 +301,7 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
         />
         <FollowController target={followTarget} following={following} onUserDrag={() => setFollowing(false)} />
         <MembersLayer members={members} leaderNickname={leaderNickname} />
-        {destination ? <RouteLayer from={followTarget} to={destination} /> : null}
+        {destination ? <RouteLayer from={followTarget} to={destination} onRoute={setRoute} /> : null}
         {destination ? (
           <Marker position={[destination.lat, destination.lng]} icon={DESTINATION_ICON}>
             <Popup>{destination.label}</Popup>
@@ -231,6 +317,9 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
           </Marker>
         ))}
       </MapContainer>
+
+      {route && route.steps.length > 0 ? <NavigationBanner steps={route.steps} position={followTarget} /> : null}
+      {route ? <RouteSummaryBar route={route} /> : null}
 
       {!following && followTarget ? (
         <button className="locate-btn" onClick={() => setFollowing(true)} aria-label="Về vị trí của tôi">

@@ -6,8 +6,10 @@ import dynamic from "next/dynamic";
 import { api, ApiError } from "../../../lib/api";
 import { getNickname, getRoomSocket } from "../../../lib/room-socket";
 import { PlaceResult } from "../../../lib/geocode";
+import { distanceMeters, LAGGING_THRESHOLD_M } from "../../../lib/geo";
 import { Destination, LobbyParticipant, ParticipantLocation, Room, SafetyPoint } from "../../../lib/types";
 import { DestinationPicker } from "../../../components/DestinationPicker";
+import { TeamPanel } from "../../../components/TeamPanel";
 
 const RoomMap = dynamic(() => import("../../../components/RoomMap").then((m) => m.RoomMap), { ssr: false });
 
@@ -25,6 +27,7 @@ export default function RoomPage() {
   const [lobby, setLobby] = useState<Record<string, LobbyParticipant>>({});
   const [starting, setStarting] = useState(false);
   const [destination, setDestination] = useState<Destination | null>(null);
+  const [activeTab, setActiveTab] = useState<"journey" | "team">("journey");
 
   const [locations, setLocations] = useState<Record<string, ParticipantLocation>>({});
   const [safetyPoints, setSafetyPoints] = useState<SafetyPoint[]>([]);
@@ -270,63 +273,48 @@ export default function RoomPage() {
 
   const memberList = Object.values(locations);
   const center = memberList[0] ? { lat: memberList[0].lat, lng: memberList[0].lng } : DEFAULT_CENTER;
+  const leaderLocation = memberList.find((m) => m.nickname === room.leaderNickname);
+  const hasLaggingMember = leaderLocation
+    ? memberList.some((m) => m.nickname !== room.leaderNickname && distanceMeters(leaderLocation, m) >= LAGGING_THRESHOLD_M)
+    : false;
 
   return (
-    <div className="room-layout">
-      <RoomMap
-        center={center}
-        members={memberList}
-        leaderNickname={room.leaderNickname}
-        safetyPoints={safetyPoints}
-        selfId={selfId}
-        destination={destination}
-      />
-
-      <div className="room-sidebar">
-        <div className="card">
-          <h2>{room.name}</h2>
-          <p className="hint">
-            Mã phòng: <span className="invite-code">{room.code}</span>
-          </p>
-        </div>
-
-        <DestinationPicker destination={destination} canEdit={isLeader} onSelect={handleSelectDestination} />
-
-        <div className="card">
-          <button
-            className={`btn ${sharing ? "" : "btn-secondary"}`}
-            onClick={sharing ? stopSharing : startSharing}
-            style={{ width: "100%" }}
-          >
-            {sharing ? "Đang chia sẻ vị trí (chạm để tắt)" : "Chia sẻ vị trí của tôi"}
-          </button>
-          {locationError ? <p className="error-text">{locationError}</p> : null}
-        </div>
-
-        <div className="card">
-          <h2>Thành viên ({memberList.length})</h2>
-          {memberList.length === 0 ? (
-            <p className="hint">Chưa có ai chia sẻ vị trí.</p>
-          ) : (
-            memberList.map((member) => (
-              <div key={member.participantId} className="member-row">
-                <span
-                  className="member-dot"
-                  style={{ background: member.nickname === room.leaderNickname ? "#1570EF" : "#12B76A" }}
-                />
-                <div style={{ flex: 1 }}>
-                  <div>{member.nickname}</div>
-                  <div className="hint">{Math.round(member.speed ?? 0)} km/h</div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <button className="btn btn-danger" onClick={triggerSos} style={{ width: "100%" }}>
-          Gửi SOS
+    <div className="room-shell">
+      <div className="tab-bar">
+        <button
+          className={`tab-btn ${activeTab === "journey" ? "active" : ""}`}
+          onClick={() => setActiveTab("journey")}
+        >
+          Hành trình
+        </button>
+        <button className={`tab-btn ${activeTab === "team" ? "active" : ""}`} onClick={() => setActiveTab("team")}>
+          Team
+          {hasLaggingMember ? <span className="tab-alert-dot" /> : null}
         </button>
       </div>
+
+      {activeTab === "journey" ? (
+        <RoomMap
+          center={center}
+          members={memberList}
+          leaderNickname={room.leaderNickname}
+          safetyPoints={safetyPoints}
+          selfId={selfId}
+          destination={destination}
+        />
+      ) : (
+        <TeamPanel
+          room={room}
+          destination={destination}
+          isLeader={isLeader}
+          onSelectDestination={handleSelectDestination}
+          members={memberList}
+          sharing={sharing}
+          onToggleSharing={sharing ? stopSharing : startSharing}
+          locationError={locationError}
+          onTriggerSos={triggerSos}
+        />
+      )}
     </div>
   );
 }
