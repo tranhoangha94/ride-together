@@ -20,3 +20,9 @@ export class JoinRoomDto {
   @IsString()
   code!: string;
 }
+
+export class InviteToRoomDto {
+  @ApiProperty()
+  @IsString()
+  emailOrPhone!: string;
+}

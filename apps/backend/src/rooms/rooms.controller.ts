@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
-import { CreateRoomDto, JoinRoomDto } from "./dto";
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { AuthUser, CurrentUser } from "../common/decorators/current-user.decorator";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { CreateRoomDto, InviteToRoomDto, JoinRoomDto } from "./dto";
 import { OptionalAuthService } from "./optional-auth.service";
 import { RoomsService } from "./rooms.service";
 
@@ -26,5 +28,12 @@ export class RoomsController {
   @Get(":id")
   get(@Param("id") id: string) {
     return this.rooms.findById(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post(":id/invite")
+  invite(@Param("id") id: string, @CurrentUser() user: AuthUser, @Body() dto: InviteToRoomDto) {
+    return this.rooms.createInvite(id, user.id, dto.emailOrPhone);
   }
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { FormEvent, useState } from "react";
+import { api, ApiError } from "../lib/api";
 import { PlaceResult } from "../lib/geocode";
 import { distanceMeters, LAGGING_THRESHOLD_M } from "../lib/geo";
 import { Destination, ParticipantLocation, Room } from "../lib/types";
@@ -36,6 +38,26 @@ export function TeamPanel({
   onKickMember
 }: Props) {
   const leader = members.find((m) => m.nickname === room.leaderNickname);
+  const [inviteValue, setInviteValue] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  async function handleInvite(event: FormEvent) {
+    event.preventDefault();
+    setInviteError(null);
+    setInviteMessage(null);
+    setInviting(true);
+    try {
+      await api(`/rooms/${room.id}/invite`, { method: "POST", body: JSON.stringify({ emailOrPhone: inviteValue }) });
+      setInviteMessage("Đã gửi lời mời.");
+      setInviteValue("");
+    } catch (err) {
+      setInviteError(err instanceof ApiError ? err.message : "Không gửi được lời mời.");
+    } finally {
+      setInviting(false);
+    }
+  }
 
   return (
     <div className="team-panel">
@@ -88,6 +110,27 @@ export function TeamPanel({
           })
         )}
       </div>
+
+      {canManageMembers ? (
+        <div className="card">
+          <h2>Mời qua email/SĐT</h2>
+          <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
+            <div className="form-field" style={{ flex: 1, marginBottom: 0 }}>
+              <input
+                value={inviteValue}
+                onChange={(e) => setInviteValue(e.target.value)}
+                placeholder="Email hoặc số điện thoại"
+                required
+              />
+            </div>
+            <button className="btn" type="submit" disabled={inviting}>
+              {inviting ? "Đang gửi..." : "Mời"}
+            </button>
+          </form>
+          {inviteError ? <p className="error-text">{inviteError}</p> : null}
+          {inviteMessage ? <p className="hint">{inviteMessage}</p> : null}
+        </div>
+      ) : null}
 
       <button className="btn btn-danger" onClick={onTriggerSos} style={{ width: "100%" }}>
         Gửi SOS

@@ -30,4 +30,9 @@ export class UsersController {
   myRooms(@CurrentUser() user: AuthUser) {
     return this.rooms.myRooms(user.id);
   }
+
+  @Get("me/invites")
+  myInvites(@CurrentUser() user: AuthUser) {
+    return this.rooms.myInvites(user.id);
+  }
 }

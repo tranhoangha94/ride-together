@@ -1,16 +1,20 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { makeInviteCode } from "../common/utils/invite-code";
+import { User } from "../users/user.entity";
 import { CreateRoomDto } from "./dto";
 import { Room } from "./room.entity";
+import { RoomInvite } from "./room-invite.entity";
 import { RoomMember, RoomMemberRole } from "./room-member.entity";
 
 @Injectable()
 export class RoomsService {
   constructor(
     @InjectRepository(Room) private readonly rooms: Repository<Room>,
-    @InjectRepository(RoomMember) private readonly roomMembers: Repository<RoomMember>
+    @InjectRepository(RoomMember) private readonly roomMembers: Repository<RoomMember>,
+    @InjectRepository(RoomInvite) private readonly roomInvites: Repository<RoomInvite>,
+    @InjectRepository(User) private readonly users: Repository<User>
   ) {}
 
   create(dto: CreateRoomDto, leaderUserId?: string) {
@@ -103,5 +107,49 @@ export class RoomsService {
     room.destinationLat = lat;
     room.destinationLng = lng;
     return this.rooms.save(room);
+  }
+
+  // Invite is only available when the room's own leader is logged in and
+  // matches leaderUserId, same scope line as kick.
+  async createInvite(roomId: string, invitedByUserId: string, emailOrPhone: string) {
+    const room = await this.findById(roomId);
+    if (room.leaderUserId !== invitedByUserId) {
+      throw new ForbiddenException("Chỉ trưởng đoàn mới có thể mời thành viên.");
+    }
+
+    const target = await this.users
+      .createQueryBuilder("user")
+      .where("user.email = :value OR user.phone = :value", { value: emailOrPhone })
+      .getOne();
+    if (!target) throw new NotFoundException("Không tìm thấy tài khoản với email/số điện thoại này.");
+
+    const existing = await this.roomInvites.findOneBy({ roomId, invitedUserId: target.id, status: "pending" });
+    if (existing) return existing;
+
+    return this.roomInvites.save(this.roomInvites.create({ roomId, invitedUserId: target.id, invitedByUserId, status: "pending" }));
+  }
+
+  async myInvites(userId: string) {
+    const invites = await this.roomInvites.find({ where: { invitedUserId: userId, status: "pending" }, order: { createdAt: "DESC" } });
+    const roomIds = [...new Set(invites.map((i) => i.roomId))];
+    const rooms = roomIds.length ? await this.rooms.findBy({ id: In(roomIds) }) : [];
+    const roomsById = new Map(rooms.map((r) => [r.id, r]));
+    return invites.map((invite) => ({ invite, room: roomsById.get(invite.roomId) }));
+  }
+
+  async respondToInvite(inviteId: string, userId: string, accept: boolean) {
+    const invite = await this.roomInvites.findOneBy({ id: inviteId });
+    if (!invite || invite.invitedUserId !== userId) throw new NotFoundException("Lời mời không tồn tại.");
+    if (invite.status !== "pending") throw new BadRequestException("Lời mời đã được xử lý.");
+
+    invite.status = accept ? "accepted" : "declined";
+    await this.roomInvites.save(invite);
+
+    if (accept) {
+      const user = await this.users.findOneBy({ id: userId });
+      await this.recordMember(invite.roomId, userId, user?.displayName ?? "Rider", "member");
+    }
+
+    return { invite, roomId: invite.roomId };
   }
 }

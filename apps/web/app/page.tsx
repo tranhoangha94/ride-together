@@ -79,6 +79,7 @@ export default function Home() {
           <>
             <span>Xin chào, {currentUser.displayName}</span>
             <Link href="/history">Lịch sử</Link>
+            <Link href="/invites">Lời mời</Link>
             <button type="button" className="link-button" onClick={handleLogout}>
               Đăng xuất
             </button>
