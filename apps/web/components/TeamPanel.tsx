@@ -16,6 +16,9 @@ type Props = {
   onToggleSharing: () => void;
   locationError: string | null;
   onTriggerSos: () => void;
+  selfId?: string | null;
+  canManageMembers?: boolean;
+  onKickMember?: (targetParticipantId: string) => void;
 };
 
 export function TeamPanel({
@@ -27,7 +30,10 @@ export function TeamPanel({
   sharing,
   onToggleSharing,
   locationError,
-  onTriggerSos
+  onTriggerSos,
+  selfId,
+  canManageMembers,
+  onKickMember
 }: Props) {
   const leader = members.find((m) => m.nickname === room.leaderNickname);
 
@@ -59,6 +65,8 @@ export function TeamPanel({
             const distanceFromLeader = !isLeaderRow && leader ? distanceMeters(leader, member) : null;
             const isLagging = distanceFromLeader != null && distanceFromLeader >= LAGGING_THRESHOLD_M;
 
+            const canKick = canManageMembers && !isLeaderRow && member.participantId !== selfId;
+
             return (
               <div key={member.participantId} className="member-row">
                 <span className={`member-dot ${isLeaderRow ? "leader" : isLagging ? "lagging" : "member"}`} />
@@ -70,6 +78,11 @@ export function TeamPanel({
                   </div>
                 </div>
                 {isLagging ? <span className="warning-pill">Đang tụt lại</span> : null}
+                {canKick ? (
+                  <button className="link-button" style={{ color: "var(--color-error)" }} onClick={() => onKickMember?.(member.participantId)}>
+                    Kick
+                  </button>
+                ) : null}
               </div>
             );
           })

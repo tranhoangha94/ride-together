@@ -22,6 +22,12 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
+  // Guests have no durable identity to persist a kick against, so a kicked
+  // guest's nickname is blocked from rejoining for the lifetime of this
+  // process only (matches how ephemeral the rest of the guest roster
+  // already is - it doesn't survive a server restart either).
+  private readonly kickedGuestNicknames = new Map<string, Set<string>>();
+
   constructor(
     private readonly rooms: RoomsService,
     private readonly optionalAuth: OptionalAuthService
@@ -67,6 +73,8 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const role = client.userId === room.leaderUserId ? "leader" : "member";
       const { kicked } = await this.rooms.recordMember(body.roomId, client.userId, client.nickname ?? "", role);
       if (kicked) return { ok: false, reason: "kicked" };
+    } else if (this.kickedGuestNicknames.get(body.roomId)?.has(client.nickname ?? "")) {
+      return { ok: false, reason: "kicked" };
     }
 
     client.roomId = body.roomId;
@@ -123,6 +131,40 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await this.rooms.setDestination(body.roomId, body.label, body.lat, body.lng);
     const destination = { label: body.label, lat: body.lat, lng: body.lng };
     this.server.to(`room:${body.roomId}`).emit("destination_updated", destination);
+    return { ok: true };
+  }
+
+  // Kick is only available when the room's leader is logged in and matches
+  // room.leaderUserId - a clean, explicit scope line rather than a
+  // half-secured feature bolted onto the nickname-based leader check the
+  // other leader actions use.
+  @SubscribeMessage("kick_member")
+  async kickMember(
+    @ConnectedSocket() client: RoomSocket,
+    @MessageBody() body: { roomId: string; targetParticipantId: string }
+  ) {
+    if (!client.roomId) return { ok: false };
+    const room = await this.rooms.findById(body.roomId);
+    if (!client.userId || client.userId !== room.leaderUserId) return { ok: false, reason: "not_leader" };
+
+    const sockets = await this.server.in(`room:${body.roomId}`).fetchSockets();
+    const target = sockets.find((s) => s.id === body.targetParticipantId);
+    if (!target) return { ok: false, reason: "not_found" };
+
+    const targetData = target.data as { nickname?: string; userId?: string };
+    if (targetData.userId) {
+      await this.rooms.kickMember(body.roomId, targetData.userId, targetData.nickname ?? "");
+    } else {
+      const nicknames = this.kickedGuestNicknames.get(body.roomId) ?? new Set<string>();
+      nicknames.add(targetData.nickname ?? "");
+      this.kickedGuestNicknames.set(body.roomId, nicknames);
+    }
+
+    this.server.to(`room:${body.roomId}`).emit("member_kicked", {
+      participantId: target.id,
+      nickname: targetData.nickname
+    });
+    target.disconnect(true);
     return { ok: true };
   }
 

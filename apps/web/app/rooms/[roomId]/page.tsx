@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { api, ApiError } from "../../../lib/api";
+import { fetchCurrentUser } from "../../../lib/auth";
 import { getNickname, getRoomSocket } from "../../../lib/room-socket";
 import { PlaceResult } from "../../../lib/geocode";
 import { distanceMeters, LAGGING_THRESHOLD_M } from "../../../lib/geo";
@@ -35,12 +36,22 @@ export default function RoomPage() {
   const [sharing, setSharing] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selfId, setSelfId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCurrentUser().then((user) => setCurrentUserId(user?.id ?? null));
+  }, []);
 
   const watchIdRef = useRef<number | null>(null);
   const safetyFetchKeyRef = useRef("");
   const safetyFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isLeader = !!room && nickname === room.leaderNickname;
+  // Kick/invite need a real, unspoofable identity check - unlike isLeader
+  // above (nickname match, good enough for start/stop/destination), so
+  // these features are simply unavailable unless the room's leader was
+  // logged in when they created it.
+  const canManageMembers = !!room?.leaderUserId && room.leaderUserId === currentUserId;
 
   useEffect(() => {
     if (!nickname) {
@@ -124,6 +135,23 @@ export default function RoomPage() {
       window.alert(`SOS! ${event.nickname} cần hỗ trợ ngay.`);
     });
 
+    socket.on("member_kicked", (event: { participantId: string; nickname?: string }) => {
+      setLobby((current) => {
+        const next = { ...current };
+        delete next[event.participantId];
+        return next;
+      });
+      setLocations((current) => {
+        const next = { ...current };
+        delete next[event.participantId];
+        return next;
+      });
+      if (event.participantId === socket.id) {
+        window.alert("Bạn đã bị leader đưa ra khỏi phòng.");
+        router.push("/");
+      }
+    });
+
     return () => {
       socket.emit("leave_room", { roomId });
       socket.off("connect");
@@ -135,13 +163,20 @@ export default function RoomPage() {
       socket.off("member_location_updated");
       socket.off("member_offline");
       socket.off("sos_alert");
+      socket.off("member_kicked");
     };
-  }, [nickname, room, roomId]);
+  }, [nickname, room, roomId, router]);
 
   function handleStart() {
     setStarting(true);
     const socket = getRoomSocket(nickname);
     socket.emit("start_room", { roomId });
+  }
+
+  function handleKickMember(targetParticipantId: string) {
+    if (!window.confirm("Đưa thành viên này ra khỏi phòng?")) return;
+    const socket = getRoomSocket(nickname);
+    socket.emit("kick_member", { roomId, targetParticipantId });
   }
 
   function handleBackToLobby() {
@@ -393,6 +428,9 @@ export default function RoomPage() {
           onToggleSharing={sharing ? stopSharing : startSharing}
           locationError={locationError}
           onTriggerSos={triggerSos}
+          selfId={selfId}
+          canManageMembers={canManageMembers}
+          onKickMember={handleKickMember}
         />
       )}
     </div>

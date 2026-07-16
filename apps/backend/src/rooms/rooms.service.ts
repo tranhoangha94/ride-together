@@ -40,6 +40,20 @@ export class RoomsService {
     return { kicked: false };
   }
 
+  // Marks a logged-in member as kicked so a later join_room (even after
+  // logging back in) is rejected. Guests have no row to mark - the gateway
+  // handles blocking their rejoin via an in-memory per-room nickname set
+  // instead, since there's no durable identity to attach it to.
+  async kickMember(roomId: string, userId: string, nickname: string) {
+    const existing = await this.roomMembers.findOneBy({ roomId, userId });
+    if (existing) {
+      existing.kickedAt = new Date();
+      await this.roomMembers.save(existing);
+      return;
+    }
+    await this.roomMembers.save(this.roomMembers.create({ roomId, userId, nickname, role: "member", kickedAt: new Date() }));
+  }
+
   async myRooms(userId: string) {
     const memberships = await this.roomMembers.find({ where: { userId }, order: { joinedAt: "DESC" } });
     const roomIds = [...new Set(memberships.map((m) => m.roomId))];

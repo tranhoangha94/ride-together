@@ -3,6 +3,7 @@ export type Room = {
   code: string;
   name: string;
   leaderNickname: string;
+  leaderUserId?: string | null;
   started: boolean;
   destinationLabel?: string | null;
   destinationLat?: number | null;
