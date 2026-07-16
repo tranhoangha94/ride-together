@@ -39,6 +39,7 @@ export default function RoomPage() {
   const watchIdRef = useRef<number | null>(null);
   const safetyFetchKeyRef = useRef("");
   const safetyFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const isLeader = !!room && nickname === room.leaderNickname;
 
   useEffect(() => {
@@ -213,6 +214,44 @@ export default function RoomPage() {
     }
     setSharing(false);
   }, []);
+
+  // Keep the screen awake while sharing location, so a rider glancing at
+  // the map mid-ride doesn't have the phone auto-lock and silently stop
+  // GPS updates. The Wake Lock is released by the browser whenever the tab
+  // is hidden (app-switch, real screen lock), so it must be re-requested on
+  // the next "visible" event rather than only once.
+  useEffect(() => {
+    if (!sharing || !("wakeLock" in navigator)) return;
+
+    let cancelled = false;
+
+    async function acquireWakeLock() {
+      try {
+        const sentinel = await navigator.wakeLock.request("screen");
+        if (cancelled) {
+          sentinel.release();
+          return;
+        }
+        wakeLockRef.current = sentinel;
+      } catch {
+        // Not fatal (e.g. tab not visible yet) - sharing still works, the screen may just sleep normally.
+      }
+    }
+
+    acquireWakeLock();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) acquireWakeLock();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+    };
+  }, [sharing]);
 
   // Share as soon as the trip actually starts - no separate toggle to remember to hit.
   useEffect(() => {
