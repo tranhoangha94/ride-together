@@ -658,6 +658,7 @@ a {
 
 /* Home screen: bento hero layout over an adventure-toned gradient backdrop */
 .home-page {
+  position: relative;
   min-height: 100vh;
   max-width: none;
   margin: 0;
@@ -776,4 +777,26 @@ a {
 
 .home-action-card .form-field {
   flex-grow: 1;
+}
+
+.home-account-bar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.home-account-bar a {
+  color: var(--color-primary);
+  font-weight: 700;
 }

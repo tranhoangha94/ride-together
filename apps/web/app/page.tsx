@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "../lib/api";
+import { CurrentUser, fetchCurrentUser, logout } from "../lib/auth";
 import { getNickname, setNickname } from "../lib/room-socket";
 import { Room } from "../lib/types";
 
@@ -16,10 +18,23 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
-    setNicknameInput(getNickname());
+    const savedNickname = getNickname();
+    setNicknameInput(savedNickname);
+    fetchCurrentUser().then((user) => {
+      setCurrentUser(user);
+      // Convenience default only - never clobber a nickname the rider
+      // already saved from a previous guest session.
+      if (user && !savedNickname) setNicknameInput(user.displayName);
+    });
   }, []);
+
+  function handleLogout() {
+    logout();
+    setCurrentUser(null);
+  }
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -59,6 +74,22 @@ export default function Home() {
 
   return (
     <main className="home-page">
+      <div className="home-account-bar">
+        {currentUser ? (
+          <>
+            <span>Xin chào, {currentUser.displayName}</span>
+            <Link href="/history">Lịch sử</Link>
+            <button type="button" className="link-button" onClick={handleLogout}>
+              Đăng xuất
+            </button>
+          </>
+        ) : (
+          <>
+            <Link href="/login">Đăng nhập</Link>
+            <Link href="/register">Đăng ký</Link>
+          </>
+        )}
+      </div>
       <div className="home-grid">
         <div className="home-panel home-brand-panel">
           <div>

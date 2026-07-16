@@ -14,6 +14,13 @@ export class Room {
   @Column({ name: "leader_nickname" })
   leaderNickname!: string;
 
+  // Set only when the room's creator was logged in at create time. Rooms
+  // created by a guest leave this null, which is what makes kick/invite
+  // (both gated on matching this column) simply unavailable in guest-led
+  // rooms rather than a half-secured feature.
+  @Column({ name: "leader_user_id", nullable: true })
+  leaderUserId?: string;
+
   @Column({ default: false })
   started!: boolean;
 

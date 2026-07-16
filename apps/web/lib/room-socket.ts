@@ -1,5 +1,5 @@
 import { io, Socket } from "socket.io-client";
-import { getSocketUrl } from "./api";
+import { getAccessToken, getSocketUrl } from "./api";
 
 const NICKNAME_KEY = "ride_together_nickname";
 
@@ -16,9 +16,10 @@ let socket: Socket | null = null;
 
 export function getRoomSocket(nickname: string): Socket {
   if (socket?.connected || socket?.active) return socket;
+  const token = getAccessToken();
   socket = io(`${getSocketUrl()}/rooms`, {
     transports: ["websocket"],
-    auth: { nickname }
+    auth: token ? { nickname, token } : { nickname }
   });
   return socket;
 }
