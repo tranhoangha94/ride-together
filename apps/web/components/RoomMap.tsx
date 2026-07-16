@@ -14,6 +14,7 @@ type Props = {
   safetyPoints: SafetyPoint[];
   selfId?: string | null;
   destination?: Destination | null;
+  onViewportChange?: (lat: number, lng: number, radiusMeters: number) => void;
 };
 
 function dotIcon(color: string, size: number) {
@@ -39,24 +40,20 @@ const MEMBER_ICON = dotIcon("#12B76A", 20);
 
 // Camera glyph (surveillance camera silhouette) so a "camera phạt nguội"
 // marker reads at a glance instead of just being an unlabeled red dot.
-const CAMERA_ICON = badgeIcon(
-  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const CAMERA_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M3 8a2 2 0 0 1 2-2h2.5l1.2-1.6a1 1 0 0 1 .8-.4h5a1 1 0 0 1 .8.4L16.5 6H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
     <circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.7"/>
-  </svg>`,
-  "#D92D20"
-);
+  </svg>`;
+const CAMERA_ICON = badgeIcon(CAMERA_SVG, "#D92D20");
 
 // Traffic-light glyph (three stacked lamps) for signal markers.
-const SIGNAL_ICON = badgeIcon(
-  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const SIGNAL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="7" y="2" width="10" height="20" rx="3" stroke="#fff" stroke-width="1.7"/>
     <circle cx="12" cy="7.2" r="1.9" fill="#fff"/>
     <circle cx="12" cy="12" r="1.9" fill="#fff"/>
     <circle cx="12" cy="16.8" r="1.9" fill="#fff"/>
-  </svg>`,
-  "#DC6803"
-);
+  </svg>`;
+const SIGNAL_ICON = badgeIcon(SIGNAL_SVG, "#DC6803");
 const DESTINATION_ICON = L.divIcon({
   className: "",
   html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#D92D20;border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
@@ -220,6 +217,98 @@ function FollowController({
   return null;
 }
 
+// Reports the map's current center + a radius derived from the visible
+// bounds so the parent can (re)fetch safety points as the rider pans/zooms,
+// instead of only ever fetching once for the position where sharing began.
+function SafetyViewportController({
+  onViewportChange
+}: {
+  onViewportChange?: (lat: number, lng: number, radiusMeters: number) => void;
+}) {
+  const map = useMap();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!onViewportChange) return;
+
+    function reportViewport() {
+      const mapCenter = map.getCenter();
+      const bounds = map.getBounds();
+      const latSpan = bounds.getNorth() - bounds.getSouth();
+      const lngSpan = bounds.getEast() - bounds.getWest();
+      const radius = Math.max(800, Math.min(5000, Math.round(Math.max(latSpan, lngSpan) * 111_000 * 0.6)));
+      onViewportChange!(mapCenter.lat, mapCenter.lng, radius);
+    }
+
+    function scheduleReport() {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(reportViewport, 450);
+    }
+
+    scheduleReport();
+    map.on("moveend", scheduleReport);
+    map.on("zoomend", scheduleReport);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      map.off("moveend", scheduleReport);
+      map.off("zoomend", scheduleReport);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, onViewportChange]);
+
+  return null;
+}
+
+function SafetyLegend({
+  showSignals,
+  showCameras,
+  cameraCount,
+  signalCount,
+  onToggleSignals,
+  onToggleCameras
+}: {
+  showSignals: boolean;
+  showCameras: boolean;
+  cameraCount: number;
+  signalCount: number;
+  onToggleSignals: () => void;
+  onToggleCameras: () => void;
+}) {
+  return (
+    <>
+      <div className="safety-legend">
+        <div className="safety-legend-row">
+          <span className="legend-dot leader" />
+          Trưởng đoàn
+        </div>
+        <div className="safety-legend-row">
+          <span className="legend-dot member" />
+          Thành viên
+        </div>
+        <button
+          type="button"
+          className={`safety-legend-row safety-legend-toggle ${!showSignals ? "off" : ""}`}
+          onClick={onToggleSignals}
+        >
+          <span className="legend-icon-swatch" style={{ background: "#DC6803" }} dangerouslySetInnerHTML={{ __html: SIGNAL_SVG }} />
+          Đèn giao thông
+        </button>
+        <button
+          type="button"
+          className={`safety-legend-row safety-legend-toggle ${!showCameras ? "off" : ""}`}
+          onClick={onToggleCameras}
+        >
+          <span className="legend-icon-swatch" style={{ background: "#D92D20" }} dangerouslySetInnerHTML={{ __html: CAMERA_SVG }} />
+          Camera
+        </button>
+      </div>
+      <div className="safety-stats-bar">
+        {cameraCount} camera · {signalCount} đèn
+      </div>
+    </>
+  );
+}
+
 type TooltipDirection = "top" | "right" | "bottom" | "left";
 const DIRECTIONS: TooltipDirection[] = ["top", "right", "bottom", "left"];
 const OVERLAP_PX = 34;
@@ -314,11 +403,17 @@ function MembersLayer({ members, leaderNickname }: { members: ParticipantLocatio
   );
 }
 
-export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId, destination }: Props) {
+export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId, destination, onViewportChange }: Props) {
   const [following, setFollowing] = useState(true);
   const [route, setRoute] = useState<RouteResult | null>(null);
+  const [showSignals, setShowSignals] = useState(true);
+  const [showCameras, setShowCameras] = useState(true);
   const self = selfId ? members.find((m) => m.participantId === selfId) : undefined;
   const followTarget = self ? { lat: self.lat, lng: self.lng } : null;
+
+  const visibleSafetyPoints = safetyPoints.filter((point) => (point.type === "camera" ? showCameras : showSignals));
+  const cameraCount = visibleSafetyPoints.filter((point) => point.type === "camera").length;
+  const signalCount = visibleSafetyPoints.filter((point) => point.type === "traffic_signal").length;
 
   return (
     <div className="room-map">
@@ -328,6 +423,7 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FollowController target={followTarget} following={following} onUserDrag={() => setFollowing(false)} />
+        <SafetyViewportController onViewportChange={onViewportChange} />
         <MembersLayer members={members} leaderNickname={leaderNickname} />
         {destination ? <RouteLayer from={followTarget} to={destination} onRoute={setRoute} /> : null}
         {destination ? (
@@ -335,7 +431,7 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
             <Popup>{destination.label}</Popup>
           </Marker>
         ) : null}
-        {safetyPoints.map((point) => (
+        {visibleSafetyPoints.map((point) => (
           <Marker
             key={point.id}
             position={[point.lat, point.lng]}
@@ -348,6 +444,15 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
 
       {route && route.steps.length > 0 ? <NavigationBanner steps={route.steps} position={followTarget} /> : null}
       {route ? <RouteSummaryBar route={route} /> : null}
+
+      <SafetyLegend
+        showSignals={showSignals}
+        showCameras={showCameras}
+        cameraCount={cameraCount}
+        signalCount={signalCount}
+        onToggleSignals={() => setShowSignals((v) => !v)}
+        onToggleCameras={() => setShowCameras((v) => !v)}
+      />
 
       {!following && followTarget ? (
         <button className="locate-btn" onClick={() => setFollowing(true)} aria-label="Về vị trí của tôi">

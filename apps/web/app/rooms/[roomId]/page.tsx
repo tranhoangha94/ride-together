@@ -36,7 +36,8 @@ export default function RoomPage() {
   const [selfId, setSelfId] = useState<string | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
-  const safetyFetchedRef = useRef(false);
+  const safetyFetchKeyRef = useRef("");
+  const safetyFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLeader = !!room && nickname === room.leaderNickname;
 
   useEffect(() => {
@@ -141,15 +142,24 @@ export default function RoomPage() {
     socket.emit("set_destination", { roomId, label: place.label, lat: place.lat, lng: place.lng });
   }
 
-  const fetchSafetyPoints = useCallback(async (lat: number, lng: number) => {
-    if (safetyFetchedRef.current) return;
-    safetyFetchedRef.current = true;
-    try {
-      const points = await api<SafetyPoint[]>(`/safety-points/nearby?lat=${lat}&lng=${lng}&radius=2000`);
-      setSafetyPoints(points);
-    } catch {
-      // Best-effort; the map still works without safety points.
-    }
+  // Debounced + deduped by a rounded (lat, lng, radius) key so panning/zooming
+  // the map (or the rider moving) can refetch safety points for the new area
+  // without re-querying on every tiny move or overlapping in-flight request.
+  const fetchSafetyPoints = useCallback((lat: number, lng: number, radius = 2000) => {
+    const normalizedRadius = Math.min(5000, Math.max(800, Math.round(radius)));
+    const key = `${Math.round(lat * 2000)}:${Math.round(lng * 2000)}:${Math.round(normalizedRadius / 500)}`;
+    if (safetyFetchKeyRef.current === key) return;
+    safetyFetchKeyRef.current = key;
+
+    if (safetyFetchTimerRef.current) clearTimeout(safetyFetchTimerRef.current);
+    safetyFetchTimerRef.current = setTimeout(async () => {
+      try {
+        const points = await api<SafetyPoint[]>(`/safety-points/nearby?lat=${lat}&lng=${lng}&radius=${normalizedRadius}`);
+        setSafetyPoints(points);
+      } catch {
+        // Best-effort; the map still works without safety points.
+      }
+    }, 450);
   }, []);
 
   const startSharing = useCallback(() => {
@@ -161,7 +171,7 @@ export default function RoomPage() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setSharing(true);
-        void fetchSafetyPoints(position.coords.latitude, position.coords.longitude);
+        fetchSafetyPoints(position.coords.latitude, position.coords.longitude);
 
         watchIdRef.current = navigator.geolocation.watchPosition(
           (pos) => {
@@ -301,6 +311,7 @@ export default function RoomPage() {
           safetyPoints={safetyPoints}
           selfId={selfId}
           destination={destination}
+          onViewportChange={fetchSafetyPoints}
         />
       ) : (
         <TeamPanel
