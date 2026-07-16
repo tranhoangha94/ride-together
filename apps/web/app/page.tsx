@@ -58,61 +58,95 @@ export default function Home() {
   }
 
   return (
-    <main className="auth-shell">
-      <div className="card">
-        <h2>Ride Together</h2>
-        <p className="hint">Theo dõi vị trí cả đoàn trên bản đồ. Không cần tài khoản.</p>
-        <div className="form-field">
-          <label htmlFor="nickname">Tên của bạn</label>
-          <input
-            id="nickname"
-            value={nickname}
-            onChange={(e) => setNicknameInput(e.target.value)}
-            placeholder="Vd: Hà, Rider 1..."
-            required
-          />
+    <main className="home-page">
+      <div className="home-grid">
+        <div className="home-panel home-brand-panel">
+          <div>
+            <h1>Phượt Together</h1>
+            <p>Theo dõi vị trí cả đoàn trên bản đồ. Không cần tài khoản.</p>
+          </div>
+          <div className="home-perks">
+            <div className="home-perk">
+              <svg className="home-perk-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M15 9L12.8 12.8L9 15L11.2 11.2L15 9Z" fill="currentColor" />
+              </svg>
+              <span>Cập nhật vị trí thời gian thực</span>
+            </div>
+            <div className="home-perk">
+              <svg className="home-perk-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                <circle cx="17" cy="9" r="2.4" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M20.5 20c0-2.6-2-4.8-4.5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+              <span>Kết nối nhóm không giới hạn</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="card">
-        <h2>Tạo phòng mới</h2>
-        <form onSubmit={handleCreate}>
-          <div className="form-field">
-            <label htmlFor="roomName">Tên phòng</label>
-            <input
-              id="roomName"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-              placeholder="Vd: Team phượt cuối tuần"
-              required
-            />
+        <div className="home-form-stack">
+          <div className="home-panel">
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label htmlFor="nickname">Tên của bạn</label>
+              <input
+                id="nickname"
+                value={nickname}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                placeholder="Vd: Hà, Rider 1..."
+                required
+              />
+            </div>
           </div>
-          {error ? <p className="error-text">{error}</p> : null}
-          <button className="btn" type="submit" disabled={creating || !nickname} style={{ width: "100%" }}>
-            {creating ? "Đang tạo..." : "Tạo phòng"}
-          </button>
-        </form>
-      </div>
 
-      <div className="card">
-        <h2>Tham gia phòng</h2>
-        <form onSubmit={handleJoin}>
-          <div className="form-field">
-            <label htmlFor="code">Mã phòng</label>
-            <input
-              id="code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="6 chữ số"
-              inputMode="numeric"
-              maxLength={6}
-              required
-            />
+          <div className="home-action-grid">
+            <div className="home-panel home-action-card">
+              <h2>Tạo phòng mới</h2>
+              <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+                <div className="form-field">
+                  <label htmlFor="roomName">Tên phòng</label>
+                  <input
+                    id="roomName"
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    placeholder="Vd: Team phượt cuối tuần"
+                    required
+                  />
+                </div>
+                {error ? <p className="error-text">{error}</p> : null}
+                <button className="btn" type="submit" disabled={creating || !nickname} style={{ width: "100%", marginTop: "auto" }}>
+                  {creating ? "Đang tạo..." : "Tạo phòng"}
+                </button>
+              </form>
+            </div>
+
+            <div className="home-panel home-action-card">
+              <h2>Tham gia phòng</h2>
+              <form onSubmit={handleJoin} style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
+                <div className="form-field">
+                  <label htmlFor="code">Mã phòng</label>
+                  <input
+                    id="code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="6 chữ số"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                  />
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  type="submit"
+                  disabled={joining || !nickname}
+                  style={{ width: "100%", marginTop: "auto" }}
+                >
+                  {joining ? "Đang vào..." : "Tham gia"}
+                </button>
+              </form>
+            </div>
           </div>
-          <button className="btn btn-secondary" type="submit" disabled={joining || !nickname} style={{ width: "100%" }}>
-            {joining ? "Đang vào..." : "Tham gia"}
-          </button>
-        </form>
+        </div>
       </div>
     </main>
   );

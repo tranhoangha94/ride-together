@@ -60,7 +60,7 @@ export function TeamPanel({
 
             return (
               <div key={member.participantId} className="member-row">
-                <span className="member-dot" style={{ background: isLeaderRow ? "#1570EF" : isLagging ? "#D92D20" : "#12B76A" }} />
+                <span className={`member-dot ${isLeaderRow ? "leader" : isLagging ? "lagging" : "member"}`} />
                 <div style={{ flex: 1 }}>
                   <div>{member.nickname}</div>
                   <div className="hint">

@@ -35,8 +35,8 @@ function badgeIcon(svgInner: string, color: string, size = 26) {
   });
 }
 
-const LEADER_ICON = dotIcon("#1570EF", 20);
-const MEMBER_ICON = dotIcon("#12B76A", 20);
+const LEADER_ICON = dotIcon("#AB3500", 20);
+const MEMBER_ICON = dotIcon("#3F6653", 20);
 
 // Camera glyph (surveillance camera silhouette) so a "camera phạt nguội"
 // marker reads at a glance instead of just being an unlabeled red dot.
@@ -56,7 +56,7 @@ const SIGNAL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" 
 const SIGNAL_ICON = badgeIcon(SIGNAL_SVG, "#DC6803");
 const DESTINATION_ICON = L.divIcon({
   className: "",
-  html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#D92D20;border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
+  html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#FF6B35;border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 22]
 });
@@ -111,7 +111,7 @@ function RouteLayer({
   }, [from?.lat, from?.lng, to?.lat, to?.lng]);
 
   if (!route) return null;
-  return <Polyline positions={route.coordinates} pathOptions={{ color: "#1570EF", weight: 4, opacity: 0.6 }} />;
+  return <Polyline positions={route.coordinates} pathOptions={{ color: "#3F6653", weight: 4, opacity: 0.6 }} />;
 }
 
 const NEXT_STEP_ARRIVE_M = 40;

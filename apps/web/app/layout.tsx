@@ -4,7 +4,7 @@ import "./styles.css";
 import { NavBar } from "../components/NavBar";
 
 export const metadata = {
-  title: "Ride Together",
+  title: "Phượt Together",
   description: "Theo dõi vị trí và cảnh báo an toàn cho đoàn phượt"
 };
 
