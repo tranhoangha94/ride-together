@@ -8,6 +8,7 @@ import { getNickname, getRoomSocket } from "../../../lib/room-socket";
 import { PlaceResult } from "../../../lib/geocode";
 import { distanceMeters, LAGGING_THRESHOLD_M } from "../../../lib/geo";
 import { Destination, LobbyParticipant, ParticipantLocation, Room, SafetyPoint } from "../../../lib/types";
+import { CopyCode } from "../../../components/CopyCode";
 import { DestinationPicker } from "../../../components/DestinationPicker";
 import { TeamPanel } from "../../../components/TeamPanel";
 
@@ -264,7 +265,7 @@ export default function RoomPage() {
         <div className="card">
           <h2>{room.name}</h2>
           <p className="hint">
-            Mã phòng: <span className="invite-code">{room.code}</span> — chia sẻ mã này cho cả đoàn.
+            Mã phòng: <CopyCode code={room.code} /> — chia sẻ mã này cho cả đoàn.
           </p>
         </div>
 

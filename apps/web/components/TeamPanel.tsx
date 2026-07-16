@@ -3,6 +3,7 @@
 import { PlaceResult } from "../lib/geocode";
 import { distanceMeters, LAGGING_THRESHOLD_M } from "../lib/geo";
 import { Destination, ParticipantLocation, Room } from "../lib/types";
+import { CopyCode } from "./CopyCode";
 import { DestinationPicker } from "./DestinationPicker";
 
 type Props = {
@@ -35,7 +36,7 @@ export function TeamPanel({
       <div className="card">
         <h2>{room.name}</h2>
         <p className="hint">
-          Mã phòng: <span className="invite-code">{room.code}</span>
+          Mã phòng: <CopyCode code={room.code} />
         </p>
       </div>
 
