@@ -41,6 +41,16 @@ export async function login(emailOrPhone: string, password: string) {
   return result.user;
 }
 
+// Also creates the account on first sign-in - same endpoint handles both.
+export async function loginWithGoogle(idToken: string) {
+  const result = await api<AuthResponse>("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ idToken })
+  });
+  setTokens(result.accessToken, result.refreshToken);
+  return result.user;
+}
+
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   if (!getAccessToken()) return null;
   try {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "../../lib/api";
 import { login } from "../../lib/auth";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,6 +33,11 @@ export default function LoginPage() {
       <div className="card">
         <h2>Đăng nhập</h2>
         <p className="hint">Đăng nhập để lưu lịch sử chuyến đi và quản lý nhóm.</p>
+
+        <GoogleSignInButton />
+        <p className="hint" style={{ textAlign: "center", margin: "0 0 16px" }}>
+          — hoặc —
+        </p>
 
         <form onSubmit={handleSubmit}>
           <div className="form-field">

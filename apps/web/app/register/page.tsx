@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "../../lib/api";
 import { register } from "../../lib/auth";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,6 +40,11 @@ export default function RegisterPage() {
       <div className="card">
         <h2>Tạo tài khoản</h2>
         <p className="hint">Lưu lại lịch sử chuyến đi và quản lý nhóm của bạn.</p>
+
+        <GoogleSignInButton />
+        <p className="hint" style={{ textAlign: "center", margin: "0 0 16px" }}>
+          — hoặc —
+        </p>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button
