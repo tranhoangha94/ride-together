@@ -299,6 +299,22 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+.toast-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-secondary-dark);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  z-index: 1000;
+  white-space: nowrap;
+}
+
 .room-shell {
   display: flex;
   flex-direction: column;

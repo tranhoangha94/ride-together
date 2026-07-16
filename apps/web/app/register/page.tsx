@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -27,16 +28,17 @@ export default function RegisterPage() {
         password,
         displayName
       });
-      router.push("/");
+      setSuccess(true);
+      setTimeout(() => router.push("/"), 1200);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Đăng ký thất bại.");
-    } finally {
       setSubmitting(false);
     }
   }
 
   return (
     <main className="auth-shell">
+      {success ? <div className="toast-banner">Đăng ký thành công! Đang vào ứng dụng...</div> : null}
       <div className="card">
         <h2>Tạo tài khoản</h2>
         <p className="hint">Lưu lại lịch sử chuyến đi và quản lý nhóm của bạn.</p>
