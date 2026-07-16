@@ -1,7 +1,7 @@
 import { Body, Controller, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
-import { GoogleAuthDto, LoginDto, RefreshDto, RegisterDto, ResendVerificationDto, VerifyEmailDto } from "./dto";
+import { GoogleAuthDto, LoginDto, RefreshDto, RegisterDto } from "./dto";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -11,16 +11,6 @@ export class AuthController {
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
-  }
-
-  @Post("verify-email")
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.auth.verifyEmail(dto.userId, dto.code);
-  }
-
-  @Post("resend-verification")
-  resendVerification(@Body() dto: ResendVerificationDto) {
-    return this.auth.resendVerification(dto.userId);
   }
 
   @Post("login")

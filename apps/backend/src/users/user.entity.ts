@@ -28,9 +28,6 @@ export class User {
   @Column({ type: "enum", enum: ["user", "admin"], default: "user" })
   role!: UserRole;
 
-  @Column({ name: "email_verified_at", type: "timestamptz", nullable: true })
-  emailVerifiedAt?: Date;
-
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;
 

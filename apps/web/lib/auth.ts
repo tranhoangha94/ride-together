@@ -15,11 +15,6 @@ type AuthResponse = {
   refreshToken: string;
 };
 
-type NeedsVerificationResponse = {
-  needsVerification: true;
-  userId: string;
-};
-
 export function isLoggedIn(): boolean {
   return !!getAccessToken();
 }
@@ -28,15 +23,13 @@ export function logout() {
   clearTokens();
 }
 
-// Register returns either tokens right away (phone signup - no verification
-// needed) or a userId to verify (email signup).
 export async function register(dto: { email?: string; phone?: string; password: string; displayName: string }) {
-  const result = await api<AuthResponse | NeedsVerificationResponse>("/auth/register", {
+  const result = await api<AuthResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify(dto)
   });
-  if ("accessToken" in result) setTokens(result.accessToken, result.refreshToken);
-  return result;
+  setTokens(result.accessToken, result.refreshToken);
+  return result.user;
 }
 
 export async function login(emailOrPhone: string, password: string) {
@@ -46,22 +39,6 @@ export async function login(emailOrPhone: string, password: string) {
   });
   setTokens(result.accessToken, result.refreshToken);
   return result.user;
-}
-
-export async function verifyEmail(userId: string, code: string) {
-  const result = await api<AuthResponse>("/auth/verify-email", {
-    method: "POST",
-    body: JSON.stringify({ userId, code })
-  });
-  setTokens(result.accessToken, result.refreshToken);
-  return result.user;
-}
-
-export async function resendVerification(userId: string) {
-  return api<{ sent: true }>("/auth/resend-verification", {
-    method: "POST",
-    body: JSON.stringify({ userId })
-  });
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {

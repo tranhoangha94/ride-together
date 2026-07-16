@@ -5,12 +5,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
 import { OAuth2Client } from "google-auth-library";
 import { Repository } from "typeorm";
-import { MailService } from "../mail/mail.service";
-import { RedisService } from "../redis/redis.service";
 import { User } from "../users/user.entity";
 import { LoginDto, RegisterDto } from "./dto";
-
-const EMAIL_OTP_TTL_SECONDS = 10 * 60;
 
 @Injectable()
 export class AuthService {
@@ -19,9 +15,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
-    private readonly redis: RedisService,
-    private readonly mail: MailService
+    private readonly config: ConfigService
   ) {
     this.googleClient = new OAuth2Client(this.config.get<string>("GOOGLE_CLIENT_ID"));
   }
@@ -47,53 +41,11 @@ export class AuthService {
       }
       throw error;
     }
-
-    // Phone-only signups skip verification entirely (no SMS provider) and
-    // log straight in. Email signups must prove ownership before we hand
-    // out tokens.
-    if (user.email) {
-      await this.sendEmailVerificationCode(user);
-      return { needsVerification: true, userId: user.id };
-    }
     return this.authResponse(user);
   }
 
   private isUniqueViolation(error: unknown): boolean {
     return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
-  }
-
-  private emailOtpKey(userId: string) {
-    return `email_otp:${userId}`;
-  }
-
-  private async sendEmailVerificationCode(user: User) {
-    if (!user.email) return;
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    await this.redis.client.set(this.emailOtpKey(user.id), code, "EX", EMAIL_OTP_TTL_SECONDS);
-    await this.mail.sendVerificationCode(user.email, code);
-  }
-
-  async resendVerification(userId: string) {
-    const user = await this.users.findOneBy({ id: userId });
-    if (!user?.email) throw new BadRequestException("Tài khoản này không dùng email.");
-    if (user.emailVerifiedAt) throw new BadRequestException("Email đã được xác thực.");
-    await this.sendEmailVerificationCode(user);
-    return { sent: true };
-  }
-
-  async verifyEmail(userId: string, code: string) {
-    const user = await this.users.findOneBy({ id: userId });
-    if (!user?.email) throw new BadRequestException("Tài khoản này không dùng email.");
-
-    const stored = await this.redis.client.get(this.emailOtpKey(userId));
-    if (!stored || stored !== code) {
-      throw new UnauthorizedException("Mã xác thực không đúng hoặc đã hết hạn.");
-    }
-
-    await this.redis.client.del(this.emailOtpKey(userId));
-    user.emailVerifiedAt = new Date();
-    await this.users.save(user);
-    return this.authResponse(user);
   }
 
   async login(dto: LoginDto) {
@@ -103,13 +55,6 @@ export class AuthService {
       .getOne();
     if (!user?.passwordHash || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException("Invalid credentials.");
-    }
-    if (user.email && !user.emailVerifiedAt) {
-      throw new UnauthorizedException({
-        message: "Bạn cần xác thực email trước khi đăng nhập.",
-        needsVerification: true,
-        userId: user.id
-      });
     }
     return this.authResponse(user);
   }
@@ -139,7 +84,6 @@ export class AuthService {
       user = await this.users.findOneBy({ email: payload.email });
       if (user) {
         user.googleId = payload.sub;
-        user.emailVerifiedAt = user.emailVerifiedAt ?? new Date();
         user = await this.users.save(user);
       }
     }
@@ -150,9 +94,7 @@ export class AuthService {
           email: payload.email,
           googleId: payload.sub,
           displayName: payload.name ?? payload.email ?? "Rider",
-          avatarUrl: payload.picture,
-          // Google already checked payload.email_verified above.
-          emailVerifiedAt: new Date()
+          avatarUrl: payload.picture
         })
       );
     }

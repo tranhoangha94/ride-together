@@ -43,19 +43,3 @@ export class GoogleAuthDto {
   @IsString()
   idToken!: string;
 }
-
-export class VerifyEmailDto {
-  @ApiProperty()
-  @IsString()
-  userId!: string;
-
-  @ApiProperty()
-  @IsString()
-  code!: string;
-}
-
-export class ResendVerificationDto {
-  @ApiProperty()
-  @IsString()
-  userId!: string;
-}

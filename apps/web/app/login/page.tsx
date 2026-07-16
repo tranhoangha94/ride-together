@@ -21,16 +21,7 @@ export default function LoginPage() {
       await login(emailOrPhone, password);
       router.push("/");
     } catch (err) {
-      if (err instanceof ApiError) {
-        const body = err.body as { needsVerification?: boolean; userId?: string } | undefined;
-        if (body?.needsVerification && body.userId) {
-          router.push(`/verify-email?userId=${body.userId}`);
-          return;
-        }
-        setError(err.message);
-      } else {
-        setError("Đăng nhập thất bại.");
-      }
+      setError(err instanceof ApiError ? err.message : "Đăng nhập thất bại.");
     } finally {
       setSubmitting(false);
     }

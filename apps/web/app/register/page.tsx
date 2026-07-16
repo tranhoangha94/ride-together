@@ -20,17 +20,13 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const result = await register({
+      await register({
         email: method === "email" ? emailOrPhone : undefined,
         phone: method === "phone" ? emailOrPhone : undefined,
         password,
         displayName
       });
-      if ("needsVerification" in result) {
-        router.push(`/verify-email?userId=${result.userId}`);
-      } else {
-        router.push("/");
-      }
+      router.push("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Đăng ký thất bại.");
     } finally {
