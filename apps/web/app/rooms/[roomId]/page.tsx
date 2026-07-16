@@ -100,6 +100,10 @@ export default function RoomPage() {
     });
 
     socket.on("room_started", () => setPhase("map"));
+    socket.on("room_stopped", () => {
+      setPhase("lobby");
+      setStarting(false);
+    });
     socket.on("destination_updated", (d: Destination) => setDestination(d));
 
     socket.on("member_location_updated", (event: ParticipantLocation) => {
@@ -124,6 +128,7 @@ export default function RoomPage() {
       socket.off("lobby_participant_joined");
       socket.off("lobby_participant_left");
       socket.off("room_started");
+      socket.off("room_stopped");
       socket.off("destination_updated");
       socket.off("member_location_updated");
       socket.off("member_offline");
@@ -135,6 +140,12 @@ export default function RoomPage() {
     setStarting(true);
     const socket = getRoomSocket(nickname);
     socket.emit("start_room", { roomId });
+  }
+
+  function handleBackToLobby() {
+    if (!window.confirm("Quay lại phòng chờ? Cả đoàn sẽ được đưa về phòng chờ để đổi điểm đến hoặc hủy chuyến.")) return;
+    const socket = getRoomSocket(nickname);
+    socket.emit("stop_room", { roomId });
   }
 
   function handleSelectDestination(place: PlaceResult) {
@@ -291,6 +302,24 @@ export default function RoomPage() {
   return (
     <div className="room-shell">
       <div className="tab-bar">
+        {isLeader ? (
+          <button
+            className="room-back-btn"
+            onClick={handleBackToLobby}
+            aria-label="Quay lại phòng chờ"
+            title="Quay lại phòng chờ"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M19 12H5M5 12L11 6M5 12L11 18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : null}
         <button
           className={`tab-btn ${activeTab === "journey" ? "active" : ""}`}
           onClick={() => setActiveTab("journey")}

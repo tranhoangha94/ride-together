@@ -81,6 +81,17 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { ok: true };
   }
 
+  @SubscribeMessage("stop_room")
+  async stopRoom(@ConnectedSocket() client: RoomSocket, @MessageBody() body: { roomId: string }) {
+    if (!client.roomId) return { ok: false };
+    const room = await this.rooms.findById(body.roomId);
+    if (client.nickname !== room.leaderNickname) return { ok: false, reason: "not_leader" };
+
+    await this.rooms.stop(body.roomId);
+    this.server.to(`room:${body.roomId}`).emit("room_stopped");
+    return { ok: true };
+  }
+
   @SubscribeMessage("set_destination")
   async setDestination(
     @ConnectedSocket() client: RoomSocket,

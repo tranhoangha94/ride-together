@@ -37,6 +37,12 @@ export class RoomsService {
     return this.rooms.save(room);
   }
 
+  async stop(id: string) {
+    const room = await this.findById(id);
+    room.started = false;
+    return this.rooms.save(room);
+  }
+
   async setDestination(id: string, label: string, lat: number, lng: number) {
     const room = await this.findById(id);
     room.destinationLabel = label;
