@@ -8,21 +8,26 @@ import {
   WebSocketServer
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
+import { OptionalAuthService } from "./optional-auth.service";
 import { RoomsService } from "./rooms.service";
 
-type RoomSocket = Socket & { nickname?: string; roomId?: string };
+type RoomSocket = Socket & { nickname?: string; roomId?: string; userId?: string };
 
 // Lightweight, no-account realtime channel: knowing the room code is the only
-// credential. Kept on its own namespace so it never touches the JWT-guarded
-// account/trip gateway.
+// credential a guest needs. An optional `token` in the handshake resolves a
+// logged-in user's id on top of that - never required, never rejects the
+// connection on its own, so guests are completely unaffected.
 @WebSocketGateway({ namespace: "/rooms", cors: { origin: true, credentials: true } })
 export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly rooms: RoomsService) {}
+  constructor(
+    private readonly rooms: RoomsService,
+    private readonly optionalAuth: OptionalAuthService
+  ) {}
 
-  handleConnection(client: RoomSocket) {
+  async handleConnection(client: RoomSocket) {
     const nickname = client.handshake.auth?.nickname;
     if (typeof nickname !== "string" || !nickname.trim()) {
       client.disconnect(true);
@@ -32,6 +37,13 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // fetchSockets() only exposes `.data`, not arbitrary instance properties,
     // so mirror the nickname there for the lobby roster lookup.
     client.data.nickname = client.nickname;
+
+    const token = client.handshake.auth?.token;
+    const user = await this.optionalAuth.resolve(typeof token === "string" ? token : undefined);
+    if (user) {
+      client.userId = user.id;
+      client.data.userId = user.id;
+    }
   }
 
   handleDisconnect(client: RoomSocket) {
@@ -50,6 +62,13 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage("join_room")
   async joinRoom(@ConnectedSocket() client: RoomSocket, @MessageBody() body: { roomId: string }) {
     const room = await this.rooms.findById(body.roomId);
+
+    if (client.userId) {
+      const role = client.userId === room.leaderUserId ? "leader" : "member";
+      const { kicked } = await this.rooms.recordMember(body.roomId, client.userId, client.nickname ?? "", role);
+      if (kicked) return { ok: false, reason: "kicked" };
+    }
+
     client.roomId = body.roomId;
 
     const existingSockets = await this.server.in(`room:${body.roomId}`).fetchSockets();
