@@ -810,9 +810,31 @@ a {
   font-weight: 600;
   color: var(--color-on-surface);
   box-shadow: var(--shadow-card);
+  max-width: calc(100vw - 32px);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .home-account-bar a {
   color: var(--color-primary);
   font-weight: 700;
+}
+
+/* On mobile the bar's content (greeting + 3 links) is too wide for a
+   floating top-right pill without overflowing past the screen edge and
+   overlapping the hero card underneath it - flow it as a normal block
+   above the card instead of floating over it. */
+@media (max-width: 640px) {
+  .home-page {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .home-account-bar {
+    position: static;
+    width: 100%;
+    max-width: 880px;
+    box-sizing: border-box;
+    border-radius: var(--radius-lg);
+  }
 }
