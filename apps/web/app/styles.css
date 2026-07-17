@@ -318,7 +318,14 @@ a {
 .room-shell {
   display: flex;
   flex-direction: column;
+  /* 100vh is the *largest possible* viewport and doesn't shrink when a
+     mobile keyboard opens or the browser chrome resizes, so content at
+     the bottom gets clipped behind the keyboard. 100dvh tracks the
+     actually-visible viewport instead; the plain vh line stays first as
+     a fallback for browsers that don't support dvh (an unsupported value
+     invalidates just that declaration, not the whole rule). */
   height: calc(100vh - 62px);
+  height: calc(100dvh - 62px);
 }
 
 .tab-bar {
