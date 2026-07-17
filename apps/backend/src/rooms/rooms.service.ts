@@ -21,9 +21,15 @@ export class RoomsService {
     return this.rooms.save(
       this.rooms.create({
         name: dto.name,
-        leaderNickname: dto.nickname,
+        // Trimmed to match how the socket handshake normalizes nicknames
+        // (see rooms.gateway.ts handleConnection) - otherwise a stray
+        // leading/trailing space typed on a mobile keyboard would make
+        // isLeader checks fail forever, silently locking the creator out
+        // of their own leader privileges on reconnect.
+        leaderNickname: dto.nickname.trim(),
         code: makeInviteCode(),
-        leaderUserId
+        leaderUserId,
+        leaderParticipantId: dto.participantId
       })
     );
   }

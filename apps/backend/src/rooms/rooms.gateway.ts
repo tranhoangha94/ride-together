@@ -9,9 +9,10 @@ import {
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
 import { OptionalAuthService } from "./optional-auth.service";
+import { Room } from "./room.entity";
 import { RoomsService } from "./rooms.service";
 
-type RoomSocket = Socket & { nickname?: string; roomId?: string; userId?: string };
+type RoomSocket = Socket & { nickname?: string; roomId?: string; userId?: string; participantId?: string };
 
 // Lightweight, no-account realtime channel: knowing the room code is the only
 // credential a guest needs. An optional `token` in the handshake resolves a
@@ -44,12 +45,28 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // so mirror the nickname there for the lobby roster lookup.
     client.data.nickname = client.nickname;
 
+    const participantId = client.handshake.auth?.participantId;
+    if (typeof participantId === "string" && participantId) {
+      client.participantId = participantId;
+      client.data.participantId = participantId;
+    }
+
     const token = client.handshake.auth?.token;
     const user = await this.optionalAuth.resolve(typeof token === "string" ? token : undefined);
     if (user) {
       client.userId = user.id;
       client.data.userId = user.id;
     }
+  }
+
+  // Nickname matching alone is fragile (case/whitespace, or a guest
+  // retyping a different name in a new browser session) - prefer the
+  // stronger signals when they're available: a logged-in leader's account
+  // id, or a guest leader's persistent per-browser participantId.
+  private isRoomLeader(client: RoomSocket, room: Room): boolean {
+    if (client.userId && room.leaderUserId) return client.userId === room.leaderUserId;
+    if (client.participantId && room.leaderParticipantId) return client.participantId === room.leaderParticipantId;
+    return client.nickname === room.leaderNickname;
   }
 
   handleDisconnect(client: RoomSocket) {
@@ -75,6 +92,24 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (kicked) return { ok: false, reason: "kicked" };
     } else if (this.kickedGuestNicknames.get(body.roomId)?.has(client.nickname ?? "")) {
       return { ok: false, reason: "kicked" };
+    }
+
+    // A rider reconnecting (page reload, phone app hand-off, a flaky
+    // connection) opens a brand new socket with a brand new id, which
+    // otherwise shows up as a second "ghost" marker alongside their old,
+    // now-stale one instead of replacing it. Evict any other live socket
+    // that's clearly the same person - matched by the persistent
+    // participantId first (survives a retyped/different nickname), falling
+    // back to nickname (covers a fresh browser with no participantId yet,
+    // or two same-named devices handing off mid-trip) - last connection
+    // for a given identity wins.
+    const priorSockets = await this.server.in(`room:${body.roomId}`).fetchSockets();
+    for (const prior of priorSockets) {
+      if (prior.id === client.id) continue;
+      const priorData = prior.data as { nickname?: string; participantId?: string };
+      const sameParticipant = client.participantId && priorData.participantId === client.participantId;
+      const sameNickname = priorData.nickname === client.nickname;
+      if (sameParticipant || sameNickname) prior.disconnect(true);
     }
 
     client.roomId = body.roomId;
@@ -112,7 +147,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async stopRoom(@ConnectedSocket() client: RoomSocket, @MessageBody() body: { roomId: string }) {
     if (!client.roomId) return { ok: false };
     const room = await this.rooms.findById(body.roomId);
-    if (client.nickname !== room.leaderNickname) return { ok: false, reason: "not_leader" };
+    if (!this.isRoomLeader(client, room)) return { ok: false, reason: "not_leader" };
 
     await this.rooms.stop(body.roomId);
     this.server.to(`room:${body.roomId}`).emit("room_stopped");
@@ -126,7 +161,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (!client.roomId) return { ok: false };
     const room = await this.rooms.findById(body.roomId);
-    if (client.nickname !== room.leaderNickname) return { ok: false, reason: "not_leader" };
+    if (!this.isRoomLeader(client, room)) return { ok: false, reason: "not_leader" };
 
     await this.rooms.setDestination(body.roomId, body.label, body.lat, body.lng);
     const destination = { label: body.label, lat: body.lat, lng: body.lng };

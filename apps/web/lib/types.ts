@@ -4,6 +4,7 @@ export type Room = {
   name: string;
   leaderNickname: string;
   leaderUserId?: string | null;
+  leaderParticipantId?: string | null;
   started: boolean;
   destinationLabel?: string | null;
   destinationLat?: number | null;

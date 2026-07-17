@@ -1,5 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsString, MaxLength, MinLength } from "class-validator";
+import { ApiPropertyOptional, ApiProperty } from "@nestjs/swagger";
+import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class CreateRoomDto {
   @ApiProperty()
@@ -13,6 +13,12 @@ export class CreateRoomDto {
   @MinLength(1)
   @MaxLength(40)
   nickname!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  participantId?: string;
 }
 
 export class JoinRoomDto {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { api, ApiError } from "../../../lib/api";
 import { fetchCurrentUser } from "../../../lib/auth";
-import { getNickname, getRoomSocket } from "../../../lib/room-socket";
+import { getNickname, getParticipantId, getRoomSocket, setNickname } from "../../../lib/room-socket";
 import { PlaceResult } from "../../../lib/geocode";
 import { distanceMeters, LAGGING_THRESHOLD_M } from "../../../lib/geo";
 import { Destination, LobbyParticipant, ParticipantLocation, Room, SafetyPoint } from "../../../lib/types";
@@ -21,7 +21,14 @@ export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
   const router = useRouter();
-  const nickname = getNickname();
+  // State (not a plain const read) so submitting the inline "enter your
+  // name" prompt below can update it without a full remount - and so a
+  // returning rider never gets bounced off this room's URL just because
+  // their nickname was empty (different browser/app, cleared storage,
+  // etc). Losing the room this way is what used to force people to
+  // create a brand new one instead of rejoining theirs.
+  const [nickname, setNicknameState] = useState(() => getNickname());
+  const [nicknameInput, setNicknameInput] = useState("");
 
   const [room, setRoom] = useState<Room | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +53,9 @@ export default function RoomPage() {
   const safetyFetchKeyRef = useRef("");
   const safetyFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const isLeader = !!room && nickname === room.leaderNickname;
+  const isLeader =
+    !!room &&
+    (nickname === room.leaderNickname || (!!room.leaderParticipantId && getParticipantId() === room.leaderParticipantId));
   // Kick/invite need a real, unspoofable identity check - unlike isLeader
   // above (nickname match, good enough for start/stop/destination), so
   // these features are simply unavailable unless the room's leader was
@@ -54,10 +63,12 @@ export default function RoomPage() {
   const canManageMembers = !!room?.leaderUserId && room.leaderUserId === currentUserId;
 
   useEffect(() => {
-    if (!nickname) {
-      router.replace("/");
-      return;
-    }
+    // Fetches regardless of whether we have a nickname yet - a returning
+    // rider with no saved nickname (fresh browser, cleared storage, Zalo's
+    // in-app browser handing off to the phone's default one) should still
+    // see which room this link points to and get a chance to enter their
+    // name and rejoin it, instead of being bounced to the home page and
+    // losing the room entirely.
     api<Room>(`/rooms/${roomId}`)
       .then((r) => {
         setRoom(r);
@@ -67,7 +78,15 @@ export default function RoomPage() {
         }
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Không tìm thấy phòng."));
-  }, [roomId, nickname, router]);
+  }, [roomId]);
+
+  function handleSubmitNickname(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = nicknameInput.trim();
+    if (!trimmed) return;
+    setNickname(trimmed);
+    setNicknameState(trimmed);
+  }
 
   useEffect(() => {
     if (!nickname || !room) return;
@@ -325,6 +344,35 @@ export default function RoomPage() {
     return (
       <main>
         <p className="hint">Đang vào phòng...</p>
+      </main>
+    );
+  }
+
+  if (!nickname) {
+    return (
+      <main className="auth-shell">
+        <button className="back-link" onClick={() => router.push("/")}>
+          ← Quay lại
+        </button>
+        <div className="card">
+          <h2>{room.name}</h2>
+          <p className="hint">Nhập tên của bạn để vào phòng này.</p>
+          <form onSubmit={handleSubmitNickname}>
+            <div className="form-field">
+              <label htmlFor="rejoinNickname">Tên của bạn</label>
+              <input
+                id="rejoinNickname"
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                placeholder="Vd: Hà, Rider 1..."
+                required
+              />
+            </div>
+            <button className="btn" type="submit" style={{ width: "100%" }}>
+              Vào phòng
+            </button>
+          </form>
+        </div>
       </main>
     );
   }

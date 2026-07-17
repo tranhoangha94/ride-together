@@ -21,6 +21,14 @@ export class Room {
   @Column({ name: "leader_user_id", nullable: true })
   leaderUserId?: string;
 
+  // The creator's persistent per-browser id (see lib/room-socket.ts
+  // getParticipantId on the frontend) - set regardless of login status.
+  // Lets a guest leader be recognized on reconnect without relying on
+  // nickname text matching exactly, and backs the live-roster dedup in
+  // rooms.gateway.ts (evicting a stale duplicate connection).
+  @Column({ name: "leader_participant_id", nullable: true })
+  leaderParticipantId?: string;
+
   @Column({ default: false })
   started!: boolean;
 

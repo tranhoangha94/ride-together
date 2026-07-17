@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "../lib/api";
 import { CurrentUser, fetchCurrentUser, logout } from "../lib/auth";
-import { getNickname, setNickname } from "../lib/room-socket";
+import { getNickname, getParticipantId, setNickname } from "../lib/room-socket";
 import { Room } from "../lib/types";
 
 export default function Home() {
@@ -44,7 +44,7 @@ export default function Home() {
       setNickname(nickname);
       const room = await api<Room>("/rooms", {
         method: "POST",
-        body: JSON.stringify({ name: roomName, nickname })
+        body: JSON.stringify({ name: roomName, nickname, participantId: getParticipantId() })
       });
       router.push(`/rooms/${room.id}`);
     } catch (err) {
