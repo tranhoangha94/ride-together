@@ -421,12 +421,25 @@ export default function RoomPage() {
 
         <div className="card">
           <h2>Đã vào phòng ({participants.length})</h2>
-          {participants.map((p) => (
-            <div key={p.participantId} className="list-item">
-              <span>{p.nickname}</span>
-              {p.nickname === room.leaderNickname ? <span className="hint">leader</span> : null}
-            </div>
-          ))}
+          {participants.map((p) => {
+            const isLeaderRow = p.nickname === room.leaderNickname;
+            const canKick = canManageMembers && !isLeaderRow && p.participantId !== selfId;
+            return (
+              <div key={p.participantId} className="list-item">
+                <span>{p.nickname}</span>
+                {isLeaderRow ? <span className="hint">leader</span> : null}
+                {canKick ? (
+                  <button
+                    className="link-button"
+                    style={{ color: "var(--color-error)", marginLeft: "auto" }}
+                    onClick={() => handleKickMember(p.participantId)}
+                  >
+                    Kick
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
         {isLeader ? (
           <button className="btn" onClick={handleStart} disabled={starting} style={{ width: "100%" }}>

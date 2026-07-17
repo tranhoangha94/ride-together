@@ -37,12 +37,18 @@ export class RoomsService {
   }
 
   // A room_members row is now written for every join, guest or logged-in -
-  // whichever of userId/participantId is present identifies the row. Prefer
-  // userId when both are somehow available (the stronger, unspoofable id).
+  // whichever of userId/participantId is present identifies the row. Must
+  // match on EITHER id, not just userId when both are present: a guest who
+  // logs in mid-session (same browser, same participantId) already has a
+  // row keyed by participantId alone, and looking up by userId only would
+  // miss it, causing recordMember to try to INSERT a second row with the
+  // same participantId and crash on the partial unique index.
   private findMemberRow(roomId: string, identity: RoomIdentity) {
-    if (identity.userId) return this.roomMembers.findOneBy({ roomId, userId: identity.userId });
-    if (identity.participantId) return this.roomMembers.findOneBy({ roomId, participantId: identity.participantId });
-    return Promise.resolve(null);
+    const where: { roomId: string; userId?: string; participantId?: string }[] = [];
+    if (identity.userId) where.push({ roomId, userId: identity.userId });
+    if (identity.participantId) where.push({ roomId, participantId: identity.participantId });
+    if (where.length === 0) return Promise.resolve(null);
+    return this.roomMembers.findOneBy(where);
   }
 
   // Returns whether this identity is currently kicked from the room so the
