@@ -1,12 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import { makeInviteCode } from "../common/utils/invite-code";
 import { User } from "../users/user.entity";
 import { CreateRoomDto } from "./dto";
 import { Room } from "./room.entity";
 import { RoomInvite } from "./room-invite.entity";
 import { RoomMember, RoomMemberRole } from "./room-member.entity";
+
+export type RoomIdentity = { userId?: string; participantId?: string };
 
 @Injectable()
 export class RoomsService {
@@ -34,34 +36,96 @@ export class RoomsService {
     );
   }
 
-  // Only ever called for a resolved (logged-in) user - guests never get a
-  // room_members row, which is what makes "guests can't save history" true
-  // by construction. Returns whether this user is currently kicked from the
-  // room so the gateway can reject the join.
-  async recordMember(roomId: string, userId: string, nickname: string, role: RoomMemberRole): Promise<{ kicked: boolean }> {
-    const existing = await this.roomMembers.findOneBy({ roomId, userId });
+  // A room_members row is now written for every join, guest or logged-in -
+  // whichever of userId/participantId is present identifies the row. Prefer
+  // userId when both are somehow available (the stronger, unspoofable id).
+  private findMemberRow(roomId: string, identity: RoomIdentity) {
+    if (identity.userId) return this.roomMembers.findOneBy({ roomId, userId: identity.userId });
+    if (identity.participantId) return this.roomMembers.findOneBy({ roomId, participantId: identity.participantId });
+    return Promise.resolve(null);
+  }
+
+  // Returns whether this identity is currently kicked from the room so the
+  // gateway can reject the join.
+  async recordMember(roomId: string, identity: RoomIdentity, nickname: string, role: RoomMemberRole): Promise<{ kicked: boolean }> {
+    const existing = await this.findMemberRow(roomId, identity);
     if (existing) {
       if (existing.kickedAt) return { kicked: true };
       existing.nickname = nickname;
+      // Backfill whichever id was missing - covers a guest logging in
+      // mid-session in the same browser without creating a duplicate row.
+      if (identity.userId) existing.userId = identity.userId;
+      if (identity.participantId) existing.participantId = identity.participantId;
+      // Explicit null (not leaving it untouched) so a member who previously
+      // left voluntarily is recognized as active again on rejoin.
+      existing.leftAt = null;
       await this.roomMembers.save(existing);
       return { kicked: false };
     }
-    await this.roomMembers.save(this.roomMembers.create({ roomId, userId, nickname, role }));
+    await this.roomMembers.save(
+      this.roomMembers.create({ roomId, userId: identity.userId, participantId: identity.participantId, nickname, role })
+    );
     return { kicked: false };
   }
 
-  // Marks a logged-in member as kicked so a later join_room (even after
-  // logging back in) is rejected. Guests have no row to mark - the gateway
-  // handles blocking their rejoin via an in-memory per-room nickname set
-  // instead, since there's no durable identity to attach it to.
-  async kickMember(roomId: string, userId: string, nickname: string) {
-    const existing = await this.roomMembers.findOneBy({ roomId, userId });
+  // Marks a member (guest or logged-in) as kicked so a later join_room -
+  // even after logging back in, or on a different device sharing the same
+  // participantId - is rejected.
+  async kickMember(roomId: string, identity: RoomIdentity, nickname: string) {
+    const existing = await this.findMemberRow(roomId, identity);
     if (existing) {
       existing.kickedAt = new Date();
       await this.roomMembers.save(existing);
       return;
     }
-    await this.roomMembers.save(this.roomMembers.create({ roomId, userId, nickname, role: "member", kickedAt: new Date() }));
+    await this.roomMembers.save(
+      this.roomMembers.create({
+        roomId,
+        userId: identity.userId,
+        participantId: identity.participantId,
+        nickname,
+        role: "member",
+        kickedAt: new Date()
+      })
+    );
+  }
+
+  // A non-leader member voluntarily leaving a started room (leader-cannot-
+  // leave is enforced by the gateway, matching how it already keeps
+  // authorization checks out of the service for stop_room/kick_member).
+  async leaveRoom(roomId: string, identity: RoomIdentity) {
+    const existing = await this.findMemberRow(roomId, identity);
+    if (!existing || existing.kickedAt) return;
+    existing.leftAt = new Date();
+    await this.roomMembers.save(existing);
+  }
+
+  // "Active" is a query, not a stored flag: a room_members row with no
+  // kickedAt/leftAt, joined to a room that's currently started. Ending a
+  // room or kicking someone frees them from "active" with zero extra
+  // bookkeeping since either one drops them straight out of this join.
+  async findActiveRoom(identity: RoomIdentity): Promise<Room | null> {
+    if (!identity.userId && !identity.participantId) return null;
+
+    const where = [];
+    if (identity.userId) where.push({ userId: identity.userId, kickedAt: IsNull(), leftAt: IsNull() });
+    if (identity.participantId) where.push({ participantId: identity.participantId, kickedAt: IsNull(), leftAt: IsNull() });
+
+    const memberships = await this.roomMembers.find({ where, order: { joinedAt: "DESC" } });
+    if (memberships.length === 0) return null;
+
+    const roomIds = [...new Set(memberships.map((m) => m.roomId))];
+    const startedRooms = await this.rooms.findBy({ id: In(roomIds), started: true });
+    const startedIds = new Set(startedRooms.map((r) => r.id));
+
+    // Defensive against the rare case of a guest ending up "active" in more
+    // than one started room at once (see plan's start_room lobby-revalidation
+    // gap) - deterministically pick the most-recently-joined match rather
+    // than assume there's exactly one.
+    for (const membership of memberships) {
+      if (startedIds.has(membership.roomId)) return startedRooms.find((r) => r.id === membership.roomId)!;
+    }
+    return null;
   }
 
   async myRooms(userId: string) {
@@ -153,7 +217,7 @@ export class RoomsService {
 
     if (accept) {
       const user = await this.users.findOneBy({ id: userId });
-      await this.recordMember(invite.roomId, userId, user?.displayName ?? "Rider", "member");
+      await this.recordMember(invite.roomId, { userId }, user?.displayName ?? "Rider", "member");
     }
 
     return { invite, roomId: invite.roomId };

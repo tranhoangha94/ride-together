@@ -23,12 +23,6 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  // Guests have no durable identity to persist a kick against, so a kicked
-  // guest's nickname is blocked from rejoining for the lifetime of this
-  // process only (matches how ephemeral the rest of the guest roster
-  // already is - it doesn't survive a server restart either).
-  private readonly kickedGuestNicknames = new Map<string, Set<string>>();
-
   constructor(
     private readonly rooms: RoomsService,
     private readonly optionalAuth: OptionalAuthService
@@ -86,13 +80,24 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async joinRoom(@ConnectedSocket() client: RoomSocket, @MessageBody() body: { roomId: string }) {
     const room = await this.rooms.findById(body.roomId);
 
-    if (client.userId) {
-      const role = client.userId === room.leaderUserId ? "leader" : "member";
-      const { kicked } = await this.rooms.recordMember(body.roomId, client.userId, client.nickname ?? "", role);
-      if (kicked) return { ok: false, reason: "kicked" };
-    } else if (this.kickedGuestNicknames.get(body.roomId)?.has(client.nickname ?? "")) {
-      return { ok: false, reason: "kicked" };
+    // A shared link can route straight into this handler without ever
+    // hitting the REST layer's own active-elsewhere check, so it needs the
+    // same guard: block joining (lobby or started) a different room while
+    // this identity is still active elsewhere, but let rejoining the same
+    // active room through.
+    const active = await this.rooms.findActiveRoom({ userId: client.userId, participantId: client.participantId });
+    if (active && active.id !== body.roomId) {
+      return { ok: false, reason: "active_elsewhere", activeRoomId: active.id };
     }
+
+    const role = this.isRoomLeader(client, room) ? "leader" : "member";
+    const { kicked } = await this.rooms.recordMember(
+      body.roomId,
+      { userId: client.userId, participantId: client.participantId },
+      client.nickname ?? "",
+      role
+    );
+    if (kicked) return { ok: false, reason: "kicked" };
 
     // A rider reconnecting (page reload, phone app hand-off, a flaky
     // connection) opens a brand new socket with a brand new id, which
@@ -186,20 +191,38 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const target = sockets.find((s) => s.id === body.targetParticipantId);
     if (!target) return { ok: false, reason: "not_found" };
 
-    const targetData = target.data as { nickname?: string; userId?: string };
-    if (targetData.userId) {
-      await this.rooms.kickMember(body.roomId, targetData.userId, targetData.nickname ?? "");
-    } else {
-      const nicknames = this.kickedGuestNicknames.get(body.roomId) ?? new Set<string>();
-      nicknames.add(targetData.nickname ?? "");
-      this.kickedGuestNicknames.set(body.roomId, nicknames);
-    }
+    const targetData = target.data as { nickname?: string; userId?: string; participantId?: string };
+    await this.rooms.kickMember(body.roomId, { userId: targetData.userId, participantId: targetData.participantId }, targetData.nickname ?? "");
 
     this.server.to(`room:${body.roomId}`).emit("member_kicked", {
       participantId: target.id,
       nickname: targetData.nickname
     });
     target.disconnect(true);
+    return { ok: true };
+  }
+
+  // A non-leader member choosing to leave a started room - distinct from
+  // the plain `leave_room` event above, which is just Socket.IO room
+  // bookkeeping fired on every unmount and carries no "I'm quitting the
+  // trip" meaning. Broadcasts `member_left` so the room sees an explicit
+  // "chose to leave" message, then leaves the Socket.IO room (not a hard
+  // socket disconnect - forcing one here raced the ack packet off the wire
+  // before the client ever received it, since disconnect() tears down the
+  // transport immediately). The client navigates itself to the home page
+  // once it gets this ack; a real accidental disconnect still only ever
+  // fires the normal member_offline/lobby_participant_left cleanup via
+  // handleDisconnect, unchanged.
+  @SubscribeMessage("leave_journey")
+  async leaveJourney(@ConnectedSocket() client: RoomSocket, @MessageBody() body: { roomId: string }) {
+    if (!client.roomId) return { ok: false };
+    const room = await this.rooms.findById(body.roomId);
+    if (this.isRoomLeader(client, room)) return { ok: false, reason: "leader_cannot_leave" };
+
+    await this.rooms.leaveRoom(body.roomId, { userId: client.userId, participantId: client.participantId });
+    client.to(`room:${body.roomId}`).emit("member_left", { participantId: client.id, nickname: client.nickname });
+    await client.leave(`room:${body.roomId}`);
+    client.roomId = undefined;
     return { ok: true };
   }
 

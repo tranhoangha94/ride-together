@@ -97,8 +97,18 @@ export default function RoomPage() {
       socket.emit(
         "join_room",
         { roomId },
-        (res: { ok: boolean; started?: boolean; lobby?: LobbyParticipant[]; destination?: Destination | null }) => {
-          if (!res.ok) return;
+        (res: {
+          ok: boolean;
+          reason?: string;
+          activeRoomId?: string;
+          started?: boolean;
+          lobby?: LobbyParticipant[];
+          destination?: Destination | null;
+        }) => {
+          if (!res.ok) {
+            if (res.reason === "active_elsewhere" && res.activeRoomId) router.replace(`/rooms/${res.activeRoomId}`);
+            return;
+          }
           if (res.started) setPhase("map");
           if (res.destination) setDestination(res.destination);
           if (res.lobby) {
@@ -154,6 +164,13 @@ export default function RoomPage() {
       window.alert(`SOS! ${event.nickname} cần hỗ trợ ngay.`);
     });
 
+    // Deliberately separate from member_offline (which stays silent) - a
+    // leader seeing this alert knows the person chose to leave, not that
+    // they went quiet from a possible accident or connection loss.
+    socket.on("member_left", (event: { nickname?: string }) => {
+      window.alert(`${event.nickname ?? "Một thành viên"} đã chủ động rời nhóm.`);
+    });
+
     socket.on("member_kicked", (event: { participantId: string; nickname?: string }) => {
       setLobby((current) => {
         const next = { ...current };
@@ -183,6 +200,7 @@ export default function RoomPage() {
       socket.off("member_offline");
       socket.off("sos_alert");
       socket.off("member_kicked");
+      socket.off("member_left");
     };
   }, [nickname, room, roomId, router]);
 
@@ -199,9 +217,17 @@ export default function RoomPage() {
   }
 
   function handleBackToLobby() {
-    if (!window.confirm("Quay lại phòng chờ? Cả đoàn sẽ được đưa về phòng chờ để đổi điểm đến hoặc hủy chuyến.")) return;
+    if (!window.confirm("Kết thúc chuyến đi? Cả đoàn sẽ được đưa về phòng chờ để đổi điểm đến hoặc hủy chuyến.")) return;
     const socket = getRoomSocket(nickname);
     socket.emit("stop_room", { roomId });
+  }
+
+  function handleLeaveJourney() {
+    if (!window.confirm("Rời khỏi chuyến đi này? Cả đoàn sẽ được báo rằng bạn đã chủ động rời nhóm.")) return;
+    const socket = getRoomSocket(nickname);
+    socket.emit("leave_journey", { roomId }, (res: { ok: boolean }) => {
+      if (res.ok) router.push("/");
+    });
   }
 
   function handleSelectDestination(place: PlaceResult) {
@@ -407,9 +433,14 @@ export default function RoomPage() {
             {starting ? "Đang xuất phát..." : "Xuất phát"}
           </button>
         ) : (
-          <p className="hint" style={{ textAlign: "center" }}>
-            Đang chờ leader bấm xuất phát...
-          </p>
+          <>
+            <p className="hint" style={{ textAlign: "center" }}>
+              Đang chờ leader bấm xuất phát...
+            </p>
+            <button type="button" className="link-button" onClick={handleLeaveJourney} style={{ width: "100%", textAlign: "center" }}>
+              Rời phòng
+            </button>
+          </>
         )}
       </main>
     );
@@ -429,8 +460,8 @@ export default function RoomPage() {
           <button
             className="room-back-btn"
             onClick={handleBackToLobby}
-            aria-label="Quay lại phòng chờ"
-            title="Quay lại phòng chờ"
+            aria-label="Kết thúc chuyến đi"
+            title="Kết thúc chuyến đi"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
@@ -441,8 +472,13 @@ export default function RoomPage() {
                 strokeLinejoin="round"
               />
             </svg>
+            Kết thúc
           </button>
-        ) : null}
+        ) : (
+          <button className="room-back-btn" onClick={handleLeaveJourney} aria-label="Rời nhóm" title="Rời nhóm">
+            Rời nhóm
+          </button>
+        )}
         <button
           className={`tab-btn ${activeTab === "journey" ? "active" : ""}`}
           onClick={() => setActiveTab("journey")}
@@ -479,6 +515,7 @@ export default function RoomPage() {
           selfId={selfId}
           canManageMembers={canManageMembers}
           onKickMember={handleKickMember}
+          onLeaveJourney={handleLeaveJourney}
         />
       )}
     </div>

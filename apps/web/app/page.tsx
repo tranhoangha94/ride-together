@@ -19,6 +19,11 @@ export default function Home() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  // Starts true so the create/join form doesn't flash before we know
+  // whether this identity should be redirected straight into an
+  // already-active trip instead.
+  const [checkingActive, setCheckingActive] = useState(true);
 
   useEffect(() => {
     const savedNickname = getNickname();
@@ -29,6 +34,14 @@ export default function Home() {
       // already saved from a previous guest session.
       if (user && !savedNickname) setNicknameInput(user.displayName);
     });
+
+    api<{ room: Room | null }>(`/rooms/active?participantId=${encodeURIComponent(getParticipantId())}`)
+      .then(({ room }) => {
+        if (room) router.replace(`/rooms/${room.id}`);
+        else setCheckingActive(false);
+      })
+      .catch(() => setCheckingActive(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleLogout() {
@@ -39,6 +52,7 @@ export default function Home() {
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setActiveRoomId(null);
     setCreating(true);
     try {
       setNickname(nickname);
@@ -48,7 +62,13 @@ export default function Home() {
       });
       router.push(`/rooms/${room.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Tạo phòng thất bại.");
+      if (err instanceof ApiError && err.status === 409) {
+        const body = err.body as { activeRoomId?: string };
+        setError(err.message);
+        setActiveRoomId(body?.activeRoomId ?? null);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Tạo phòng thất bại.");
+      }
     } finally {
       setCreating(false);
     }
@@ -57,19 +77,34 @@ export default function Home() {
   async function handleJoin(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setActiveRoomId(null);
     setJoining(true);
     try {
       setNickname(nickname);
       const room = await api<Room>("/rooms/join", {
         method: "POST",
-        body: JSON.stringify({ code })
+        body: JSON.stringify({ code, participantId: getParticipantId() })
       });
       router.push(`/rooms/${room.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không tìm thấy phòng với mã này.");
+      if (err instanceof ApiError && err.status === 409) {
+        const body = err.body as { activeRoomId?: string };
+        setError(err.message);
+        setActiveRoomId(body?.activeRoomId ?? null);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Không tìm thấy phòng với mã này.");
+      }
     } finally {
       setJoining(false);
     }
+  }
+
+  if (checkingActive) {
+    return (
+      <main className="home-page">
+        <p className="hint">Đang kiểm tra chuyến đi...</p>
+      </main>
+    );
   }
 
   return (
@@ -146,6 +181,11 @@ export default function Home() {
                   />
                 </div>
                 {error ? <p className="error-text">{error}</p> : null}
+                {activeRoomId ? (
+                  <button type="button" className="link-button" onClick={() => router.push(`/rooms/${activeRoomId}`)}>
+                    Quay lại chuyến đi đang hoạt động
+                  </button>
+                ) : null}
                 <button className="btn" type="submit" disabled={creating || !nickname} style={{ width: "100%", marginTop: "auto" }}>
                   {creating ? "Đang tạo..." : "Tạo phòng"}
                 </button>
@@ -167,6 +207,12 @@ export default function Home() {
                     required
                   />
                 </div>
+                {error ? <p className="error-text">{error}</p> : null}
+                {activeRoomId ? (
+                  <button type="button" className="link-button" onClick={() => router.push(`/rooms/${activeRoomId}`)}>
+                    Quay lại chuyến đi đang hoạt động
+                  </button>
+                ) : null}
                 <button
                   className="btn btn-secondary"
                   type="submit"

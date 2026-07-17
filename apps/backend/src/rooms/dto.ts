@@ -25,6 +25,12 @@ export class JoinRoomDto {
   @ApiProperty()
   @IsString()
   code!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  participantId?: string;
 }
 
 export class InviteToRoomDto {

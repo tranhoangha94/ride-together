@@ -21,6 +21,7 @@ type Props = {
   selfId?: string | null;
   canManageMembers?: boolean;
   onKickMember?: (targetParticipantId: string) => void;
+  onLeaveJourney?: () => void;
 };
 
 export function TeamPanel({
@@ -35,7 +36,8 @@ export function TeamPanel({
   onTriggerSos,
   selfId,
   canManageMembers,
-  onKickMember
+  onKickMember,
+  onLeaveJourney
 }: Props) {
   const leader = members.find((m) => m.nickname === room.leaderNickname);
   const [inviteValue, setInviteValue] = useState("");
@@ -135,6 +137,12 @@ export function TeamPanel({
       <button className="btn btn-danger" onClick={onTriggerSos} style={{ width: "100%" }}>
         Gửi SOS
       </button>
+
+      {!isLeader && onLeaveJourney ? (
+        <button className="link-button" onClick={onLeaveJourney} style={{ width: "100%", textAlign: "center" }}>
+          Rời nhóm
+        </button>
+      ) : null}
     </div>
   );
 }
