@@ -46,14 +46,17 @@ const CAMERA_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
   </svg>`;
 const CAMERA_ICON = badgeIcon(CAMERA_SVG, "#D92D20");
 
-// Traffic-light glyph (three stacked lamps) for signal markers.
-const SIGNAL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+// Traffic-light glyph (three stacked lamps) for signal markers - kept
+// noticeably smaller than the camera badge (see SIGNAL_ZOOM_WIDTH_THRESHOLD_M
+// below) since these are far more numerous and were covering nearby rider
+// markers on the map.
+const SIGNAL_SVG = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="7" y="2" width="10" height="20" rx="3" stroke="#fff" stroke-width="1.7"/>
     <circle cx="12" cy="7.2" r="1.9" fill="#fff"/>
     <circle cx="12" cy="12" r="1.9" fill="#fff"/>
     <circle cx="12" cy="16.8" r="1.9" fill="#fff"/>
   </svg>`;
-const SIGNAL_ICON = badgeIcon(SIGNAL_SVG, "#DC6803");
+const SIGNAL_ICON = badgeIcon(SIGNAL_SVG, "#DC6803", 18);
 const DESTINATION_ICON = L.divIcon({
   className: "",
   html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#FF6B35;border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
@@ -259,6 +262,34 @@ function SafetyViewportController({
   return null;
 }
 
+// Only show traffic-signal markers once the rider is zoomed in close enough
+// (viewport width ~1.5km or less) - at a wider zoom there are too many
+// signals packed into too few pixels, and they end up covering the rider's
+// own marker underneath them.
+const SIGNAL_ZOOM_WIDTH_THRESHOLD_M = 1500;
+
+function SignalZoomGate({ onChange }: { onChange: (closeEnough: boolean) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    function update() {
+      const bounds = map.getBounds();
+      const widthM = bounds.getSouthWest().distanceTo(bounds.getSouthEast());
+      onChange(widthM <= SIGNAL_ZOOM_WIDTH_THRESHOLD_M);
+    }
+    update();
+    map.on("zoomend", update);
+    map.on("moveend", update);
+    return () => {
+      map.off("zoomend", update);
+      map.off("moveend", update);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
+  return null;
+}
+
 function SafetyLegend({
   showSignals,
   showCameras,
@@ -408,10 +439,13 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [showSignals, setShowSignals] = useState(true);
   const [showCameras, setShowCameras] = useState(true);
+  const [signalsZoomedIn, setSignalsZoomedIn] = useState(true);
   const self = selfId ? members.find((m) => m.participantId === selfId) : undefined;
   const followTarget = self ? { lat: self.lat, lng: self.lng } : null;
 
-  const visibleSafetyPoints = safetyPoints.filter((point) => (point.type === "camera" ? showCameras : showSignals));
+  const visibleSafetyPoints = safetyPoints.filter((point) =>
+    point.type === "camera" ? showCameras : showSignals && signalsZoomedIn
+  );
   const cameraCount = visibleSafetyPoints.filter((point) => point.type === "camera").length;
   const signalCount = visibleSafetyPoints.filter((point) => point.type === "traffic_signal").length;
 
@@ -424,6 +458,7 @@ export function RoomMap({ center, members, leaderNickname, safetyPoints, selfId,
         />
         <FollowController target={followTarget} following={following} onUserDrag={() => setFollowing(false)} />
         <SafetyViewportController onViewportChange={onViewportChange} />
+        <SignalZoomGate onChange={setSignalsZoomedIn} />
         <MembersLayer members={members} leaderNickname={leaderNickname} />
         {destination ? <RouteLayer from={followTarget} to={destination} onRoute={setRoute} /> : null}
         {destination ? (
