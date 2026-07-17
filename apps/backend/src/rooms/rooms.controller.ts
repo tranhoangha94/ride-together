@@ -2,8 +2,9 @@ import { Body, ConflictException, Controller, Get, Headers, Param, Post, Query, 
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AuthUser, CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
-import { CreateRoomDto, InviteToRoomDto, JoinRoomDto } from "./dto";
+import { CreateRoomDto, InviteToRoomDto, JoinRoomDto, LeaveActiveRoomDto } from "./dto";
 import { OptionalAuthService } from "./optional-auth.service";
+import { RoomsGateway } from "./rooms.gateway";
 import { RoomsService } from "./rooms.service";
 
 @ApiTags("Rooms")
@@ -11,7 +12,8 @@ import { RoomsService } from "./rooms.service";
 export class RoomsController {
   constructor(
     private readonly rooms: RoomsService,
-    private readonly optionalAuth: OptionalAuthService
+    private readonly optionalAuth: OptionalAuthService,
+    private readonly gateway: RoomsGateway
   ) {}
 
   @Post()
@@ -50,6 +52,34 @@ export class RoomsController {
     const user = await this.optionalAuth.resolve(this.optionalAuth.fromAuthHeader(authHeader));
     const room = await this.rooms.findActiveRoom({ userId: user?.id, participantId });
     return { room };
+  }
+
+  // A direct escape hatch that doesn't depend on ever reaching the room's
+  // own socket session - a rider who got auto-redirected into a stuck/
+  // broken trip on the home page needs a way out that works over plain
+  // HTTP alone. Leader identities end the trip for everyone (same effect
+  // as "Kết thúc"); non-leader identities just leave it.
+  @Post("active/leave")
+  async leaveActive(@Body() dto: LeaveActiveRoomDto, @Headers("authorization") authHeader?: string) {
+    const user = await this.optionalAuth.resolve(this.optionalAuth.fromAuthHeader(authHeader));
+    const identity = { userId: user?.id, participantId: dto.participantId };
+    const active = await this.rooms.findActiveRoom(identity);
+    if (!active) return { ok: false };
+
+    const isLeader =
+      (!!identity.userId && identity.userId === active.leaderUserId) ||
+      (!!identity.participantId && identity.participantId === active.leaderParticipantId);
+
+    if (isLeader) {
+      await this.rooms.stop(active.id);
+      // Matches the realtime effect of the in-room "Kết thúc" button so
+      // anyone currently viewing the trip is kicked back to the lobby
+      // immediately, not just whenever they next reload.
+      this.gateway.server.to(`room:${active.id}`).emit("room_stopped");
+    } else {
+      await this.rooms.leaveRoom(active.id, identity);
+    }
+    return { ok: true, roomId: active.id };
   }
 
   @Get(":id")

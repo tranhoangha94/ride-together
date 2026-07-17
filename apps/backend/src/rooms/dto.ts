@@ -38,3 +38,11 @@ export class InviteToRoomDto {
   @IsString()
   emailOrPhone!: string;
 }
+
+export class LeaveActiveRoomDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  participantId?: string;
+}

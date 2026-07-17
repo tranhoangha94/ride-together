@@ -20,10 +20,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  // Starts true so the create/join form doesn't flash before we know
-  // whether this identity should be redirected straight into an
-  // already-active trip instead.
-  const [checkingActive, setCheckingActive] = useState(true);
+  const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+  const [leavingActive, setLeavingActive] = useState(false);
 
   useEffect(() => {
     const savedNickname = getNickname();
@@ -35,14 +33,36 @@ export default function Home() {
       if (user && !savedNickname) setNicknameInput(user.displayName);
     });
 
+    // Surfaced as a dismissible banner rather than an automatic redirect -
+    // a silent router.replace() here left riders with no way back to this
+    // form at all if the in-room "leave"/"end trip" actions ever failed to
+    // reach them (e.g. a rider auto-tossed into a stuck trip had nowhere
+    // else to go). The create/join form below always stays visible.
     api<{ room: Room | null }>(`/rooms/active?participantId=${encodeURIComponent(getParticipantId())}`)
-      .then(({ room }) => {
-        if (room) router.replace(`/rooms/${room.id}`);
-        else setCheckingActive(false);
-      })
-      .catch(() => setCheckingActive(false));
+      .then(({ room }) => setActiveRoom(room))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const isActiveRoomLeader =
+    !!activeRoom &&
+    ((!!currentUser && activeRoom.leaderUserId === currentUser.id) ||
+      (!!activeRoom.leaderParticipantId && activeRoom.leaderParticipantId === getParticipantId()));
+
+  async function handleLeaveActive() {
+    setLeavingActive(true);
+    try {
+      await api("/rooms/active/leave", {
+        method: "POST",
+        body: JSON.stringify({ participantId: getParticipantId() })
+      });
+      setActiveRoom(null);
+    } catch {
+      // Best-effort - the banner just stays up so the rider can retry.
+    } finally {
+      setLeavingActive(false);
+    }
+  }
 
   function handleLogout() {
     logout();
@@ -99,14 +119,6 @@ export default function Home() {
     }
   }
 
-  if (checkingActive) {
-    return (
-      <main className="home-page">
-        <p className="hint">Đang kiểm tra chuyến đi...</p>
-      </main>
-    );
-  }
-
   return (
     <main className="home-page">
       <div className="home-account-bar">
@@ -126,6 +138,25 @@ export default function Home() {
           </>
         )}
       </div>
+      {activeRoom ? (
+        <div className="home-panel" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span>
+            Bạn đang có chuyến đi đang hoạt động: <strong>{activeRoom.name}</strong> (mã {activeRoom.code})
+          </span>
+          <button className="btn" type="button" onClick={() => router.push(`/rooms/${activeRoom.id}`)} style={{ marginLeft: "auto" }}>
+            Tiếp tục chuyến đi
+          </button>
+          <button
+            className="link-button"
+            type="button"
+            onClick={handleLeaveActive}
+            disabled={leavingActive}
+            style={{ color: "var(--color-error)" }}
+          >
+            {leavingActive ? "Đang xử lý..." : isActiveRoomLeader ? "Kết thúc chuyến đi" : "Rời nhóm"}
+          </button>
+        </div>
+      ) : null}
       <div className="home-grid">
         <div className="home-panel home-brand-panel">
           <div>
